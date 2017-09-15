@@ -1,0 +1,412 @@
+---
+title: "Kinetic Models"
+output: 
+  html_document:
+    theme: lumen
+    toc: true
+    toc_depth: 3
+    toc_float: true
+    number_sections: false
+    code_folding: hide
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, fig.width=10)
+
+if (!require(pacman)) install.packages("pacman")
+pacman::p_load(plyr, dplyr, tidyr, DT, data.table, lubridate, ggplot2, plotly, nlme, MuMIn)
+
+wd <- "~/Desktop/=/Results and Analysis/Cognition_KineticEffect/Gr28bD/TempCurve/R_TMV_TempCurve/Gr28bd"
+
+setwd(wd)
+
+filenames <- list.files(wd, pattern="*.csv") ## Keep in folder only the .csv files that are of interest
+```
+
+## Data Input
+
+### Load and massage data
+
+#### Fixed data
+
+```{r load and massage data}
+df <- sapply(filenames,
+             read.csv,
+             sep=",",
+             dec = ".",
+             header=TRUE,
+             stringsAsFactors = FALSE,
+             simplify = FALSE) %>%
+  ldply(.) %>%
+  mutate(Name=gsub("\\..*", "", .id)) %>%
+  separate(Name, c("Experiment", "Sex", "Fly"), "_") %>%
+  select(-.id) %>%
+  gather(Time, Speed, -c(Temp, Min, Experiment, Sex, Fly)) %>%
+  filter(!is.na(Speed)) %>%
+  arrange(Experiment, Sex, Fly, Time, Min, Temp) %>%
+  group_by(Experiment, Sex, Fly, Time)
+
+grps <- group_indices(df)
+
+df <- df %>%
+  ungroup() %>%
+  mutate(FlyID= grps) %>%
+  group_by(Experiment, Sex) %>%
+  mutate(FlyID=FlyID-min(FlyID)+1) %>%
+  ungroup() %>%
+  mutate(Time=hm(Time),
+         Hour=hour(round_date(as_datetime(Time), unit="hour"))) %>%
+  mutate(ToD=case_when(.$Hour < 12 ~ "Morning",
+                       .$Hour >= 12 & .$Hour < 15 ~ "Siesta",
+                       .$Hour >= 15 & .$Hour < 18 ~ "Afternoon",
+                       .$Hour >= 18 ~ "Evening")) %>%
+  select(Experiment, Sex, Fly, FlyID, Hour, ToD, Min, Temp, Speed) %>%
+  filter(Min>7, Experiment=="CurveFail")
+
+rm(grps)
+
+datatable(df)
+```
+
+```{r matlab data, eval=FALSE, echo=FALSE}
+df_mat <- df %>%
+  select(Sex, Temp, Speed) %>%
+  mutate(Sex=ifelse(Sex=="Males", 0, 1))  ## Male=0 and Female=1
+
+write.csv(df_mat, "df_mat.csv") ## Create file for TMV analysis -- Delete its first column and save as .xls
+```
+
+#### Mean data
+```{r data means}
+df_mean <- df %>%
+  group_by(Experiment, Fly, Sex, Min, Temp) %>%
+  summarise(N=n(), sd=sd(Speed, na.rm=TRUE), se=sd(Speed, na.rm=TRUE)/sqrt(n()), Speed=mean(Speed, na.rm=TRUE)) %>%
+  group_by(Experiment, Sex) %>%
+  mutate(ciMult = qt(0.475 + .5, N-1),
+         ci=se*ciMult) %>%
+  ungroup() %>%
+  select(Experiment, Sex, Min, Temp, Speed, everything(), -ciMult)
+
+datatable(df_mean)
+```
+
+---
+
+---
+
+---
+
+## Plot data
+
+### All data
+```{r plot data}
+ggplot(df, aes(x=as.factor(Min), y=Speed, color=Sex)) +
+  geom_boxplot() +
+  scale_x_discrete(breaks=df$Min, labels=df$Temp) +
+  scale_y_continuous(limits = c(0, NA)) +
+  xlab("Temperature (C)") +
+  facet_grid(Experiment ~ Sex) +
+  theme_bw() +
+  theme(legend.position="none",
+        axis.text.x = element_text(angle = 90, hjust = 1))
+```
+
+### Mean data
+
+```{r plot mean data}
+ggplot(df_mean, aes(x=as.factor(Min), y=Speed, color=Sex, group=1)) +
+  geom_errorbar(aes(ymin=Speed-se, ymax=Speed+se, color=Sex), width=0.5) +
+  geom_line() +
+  geom_point(size=3, shape=21, fill="white") +
+  scale_x_discrete(breaks=df$Min, labels=df$Temp) +
+  scale_y_continuous(limits = c(0, NA)) +
+  xlab("Temperature (C)") +
+  facet_grid(Experiment ~ Sex) +
+  theme_bw() +
+  theme(legend.position="none",
+        axis.text.x = element_text(angle = 90, hjust = 1))
+```
+
+### Speed over temperature
+
+```{r speed over tempplot, warning=FALSE}
+ggplot(df, aes(x=Temp, y=Speed, color=Fly, shape=Sex)) +
+  geom_point() +
+  geom_smooth(aes(group=1), method = 'loess') +
+  scale_x_continuous(breaks=unique(df$Temp), labels=unique(df$Temp)) +
+  scale_y_continuous(limits = c(0, NA)) +
+  theme_bw()
+```
+
+---
+
+---
+
+---
+
+## Comparison of thermal performance curves
+
+### Regression Analysis
+
+```{r regression}
+lm <- lm(Speed ~ poly(Temp, 3) + Sex, data=df_mean)
+
+summary(lm)
+
+df_plot <- df_mean %>%
+  mutate(pred=predict(lm,.))
+
+ggplot(df_plot, aes(x=as.factor(Min), y=Speed, color=Sex, group=1)) +
+  geom_errorbar(aes(ymin=Speed-se, ymax=Speed+se, color=Sex), width=0.5) +
+  geom_line() +
+  geom_point(size=3, shape=21, fill="white") +
+  geom_line(aes(y=pred)) +
+  scale_x_discrete(breaks=df$Min, labels=df$Temp) + 
+  scale_y_continuous(limits = c(0, NA)) +
+  xlab("Temperature (C)") +
+  facet_grid(Experiment ~ Sex) +
+  theme_bw() +
+  theme(legend.position="none",
+        axis.text.x = element_text(angle = 90, hjust = 1))
+```
+
+---
+
+---
+
+---
+
+## Model Fitting
+
+```{r function list}
+# Error function
+erf <- function(x) 2 * pnorm(x * sqrt(2)) - 1
+
+# Gaussian
+model_gauss <- function(Temp, a, b, c) {
+  a*exp(-0.5*(abs(Temp-b)/c)^2)
+}
+
+# Quadratic
+model_quad <- function(Temp, a, b, c) {
+  (a*Temp^2) + (b*Temp) + c
+}
+
+# Modified Gaussian
+model_modgauss <- function(Temp, a, b, c, d) {
+  a*exp(-0.5*(abs(Temp-b)/c)^d)
+}
+
+# Weibull
+model_weibull <- function(Temp, a, b, c, d) {
+  ( a*((d-1)/d)^((1-d)/d) )*( ( ((Temp-b)/c) + ((d-1)/d)^(d-1) )^(d-1) )*exp( -( ((Temp-b)/c) + ((d-1)/d)^(1/d) )^d ) + (d-1)/d
+}
+
+# Exponentially modified Gaussian
+model_expgauss <- function(Temp, a, b, c, d) {
+  ((a*c*sqrt(2*pi))/2*d)*exp( ((b-Temp)/d) + ((c^2)/(2*d^2)) )*( sign(d) - erf( ((b-Temp)/sqrt(2*c)) + (c/sqrt(2*d)) ) )
+}
+
+# Logan 6
+model_logan6 <- function(Temp, psi, rho, dt, tm) {
+  tau <- (tm - Temp)/dt
+  s <- psi*(exp(rho*Temp) - exp((rho*tm)-tau))
+  return(s)
+}
+
+# Logan 10
+model_logan10 <- function(Temp, alpha, k, rho, dt, tm) {
+  tau <- (tm - Temp)/dt
+  s <- alpha*(((1 + k*exp(-rho*Temp))^(-1)) - exp(-tau))
+  return(s)
+}
+
+
+```
+
+```{r start finder, echo=FALSE, eval=FALSE} 
+model<-NULL     ## Brute force: Randomly pick starting parameters to look for conversion
+while(is.null(model)){
+  try(
+    {start <- round(runif(4, -30, 30), 2) # Change first number to number of coefficients in first line of model
+    # Substitute this model for model of interest and change start values to start,
+    model <- nlme(Speed~model_weibull(Temp, a, b, c, d),
+                          data = df,
+                          fixed = a + b + c + d ~ 1,
+                          random = list(FlyID=pdDiag(list(a~1,b~1,c~1,d~1))),
+                          start = start,
+                     control = list(msVerbose=TRUE))        
+    
+      }, silent = FALSE)
+}
+```
+
+### Fit models to data
+
+```{r coeficients all}
+a<-nls(Speed~model_gauss(Temp, a, b, c),                 #Simple model to test coefficients after making curve
+                  data = df, start = c(a=1.5, b=31, c=4))
+fit_gauss <- nlme(Speed~model_gauss(Temp, a, b, c),
+                  data = df,
+                  fixed = list(a~1,b~1,c~1),
+                  random = list(FlyID=pdDiag(list(a~1,b~1,c~1))),
+                  start = c(0.9,35.2,5.82))                      # Up to 50 iterations to look for best fit
+
+b<-nls(Speed~model_quad(Temp, a, b, c),
+                  data = df, start = c(a=-0.008, b=0.4, c=-4.1))
+fit_quad <- nlme(Speed~model_quad(Temp, a, b, c),
+                  data = df,
+                  fixed = list(a~1,b~1,c~1),
+                  random = list(FlyID=pdDiag(list(a~1,b~1,c~1))),
+                  start = c(a=-0.069, b=0.42, c=-5.07))
+
+# c<-nls(Speed~model_modgauss(Temp, a, b, c, d),
+#                   data = df, start = c(a=2, b=32, c=5, d=1))
+fit_modgauss <- nlme(Speed~model_modgauss(Temp, a, b, c, d),
+                  data = df,
+                  fixed = list(a~1,b~1,c~1,d~1),
+                  random = list(FlyID=pdDiag(list(a~1,b~1,c~1,d~1))),
+                  start = c(a=0.9, b=35.7, c=5.78, d=1.50),
+                  control=list(msVerbose = FALSE,
+                               pnlsTol=10))
+
+# d<-nls(Speed~model_weibull(Temp, a, b, c, d),
+# data = df, start = c(a=90, b=45, c=30, d=7))
+# fit_weibull <- nlme(Speed~model_weibull(Temp, a, b, c, d),
+#                           data = df,
+#                           fixed = a + b + c + d ~ 1,
+#                           random = list(FlyID=pdDiag(list(a~1,b~1,c~1,d~1))),
+#                           start = c(a=36, b=19, c=38, d=6))
+
+# e<-nls(Speed~model_logan6(Temp, psi, rho, dt, tm),
+#                   data = df, start = c(psi=0.30, rho=0.05, dt=4, tm=46))
+fit_logan6 <- nlme(Speed~model_logan6(Temp, psi, rho, dt, tm),
+                  data = df,
+                  fixed = psi + rho + dt + tm ~ 1,
+                  random = list(FlyID=pdDiag(list(psi~1,rho~1,dt~1,tm~1))),
+                  start = c(rho=0.09, psi=0.072, dt=5.3, tm=44),
+                  control=list(msVerbose = FALSE,
+                               pnlsTol=10))
+
+# f<-nls(Speed~model_logan10(Temp, alpha, k, rho, dt, tm),
+#                   data = df, start = c(alpha=2.2, k=40, rho=0.16))
+fit_logan10 <- nlme(Speed~model_logan10(Temp, alpha, k, rho, dt, tm),
+                  data = df,
+                  fixed = alpha + k + rho + dt + tm ~ 1,
+                  random = list(FlyID=pdDiag(list(alpha~1,k~1,rho~1,dt~1,tm~1))),
+                  start = c(alpha=3.268, k=345, rho=0.174, dt=7.31, tm=43.74),
+                  control=list(msVerbose = FALSE,
+                               pnlsTol=10))
+
+dflogan <- df %>% 
+filter(Temp %in% c(16, 18, 20, 22, 24, 26, 28, 30, 32, 34, 36, 38, 40))
+
+# g<-nls(Speed~model_expgauss(Temp, a, b, c, d),
+#                   data = df, start = c(a=0.004, b=12, c=8, d=3))
+# fit_expgauss <- nlme(Speed~model_expgauss(Temp, a, b, c, d),
+#                      data = df,
+#                      fixed = a + b + c + d ~ 1,
+#                      random = list(FlyID=pdDiag(list(a~1,b~1,c~1,d~1))),
+#                      start = c(a=0.0000002, b=20, c=2, d=20),
+#                      control=list(msVerbose = FALSE,
+#                                pnlsTol=10))
+
+#### Uncomment to save model outputs
+# temps <- seq(16, 46, 2)
+# preds <- data.frame(temp = temps,
+#                     logan6 = model_logan6(temps, coefs$psi[3], coefs$rho[3], coefs$dt[3], coefs$tm[3]),
+#                     logan10 = model_logan10(temps, coefs$alpha[2], coefs$k[2], coefs$rho[2], coefs$dt[2], coefs$tm[2]),
+#                     modgauss = model_modgauss(temps, coefs$a[4], coefs$b[4], coefs$c[4], coefs$d[4]))
+# write.csv(preds, "modeloutput.csv", row.names = FALSE)
+
+
+coefs <- data.frame(Gauss=coef(fit_gauss),                 # Creates coefficient table for models
+                    Quad=coef(fit_quad),
+                    ModGauss=coef(fit_modgauss),
+                    # Weibull=coef(fit_weibull),
+                    Logan6=coef(fit_logan6),
+                    Logan10=coef(fit_logan10))%>%
+                    # ExpGauss=coef(fit_expgauss)) %>%
+  t() %>%
+  as.data.frame() %>%
+  mutate(Row=row.names(.)) %>%
+  separate(Row, c("Model", "Coef"), "[.]") %>%
+  gather(Fly, Val, -c(Model, Coef)) %>%
+  group_by(Model, Coef) %>%
+  summarise(Val=mean(Val)) %>%
+  ungroup() %>%
+  spread(Coef, Val)
+
+datatable(coefs)
+```
+
+
+### Plot models from all data over graph of mean data
+
+```{r model plot all, warning=FALSE}
+df_plot <- df_mean %>%
+  mutate(Gauss = model_gauss(Temp, a=coefs$a[1], b=coefs$b[1], c=coefs$c[1]),
+         Logan10 = model_logan10(Temp, alpha=coefs$alpha[2], k=coefs$k[2], rho=coefs$rho[2], dt=coefs$dt[2], tm=coefs$tm[2]),
+         Logan6 = model_logan6(Temp, psi=coefs$psi[3], rho=coefs$rho[3], dt=coefs$dt[3], tm=coefs$tm[3]),
+         ModGauss = model_modgauss(Temp, a=coefs$a[4], b=coefs$b[4], c=coefs$c[4], d=coefs$d[4]),
+         # ExpGauss = model_expgauss(Temp, a=coefs$a[1], b=coefs$b[1], c=coefs$c[1], d=coefs$d[1]),
+         Quad = model_quad(Temp, a=coefs$a[5], b=coefs$b[5], c=coefs$c[5]))%>%
+         # Weibull = model_weibull(Temp, a=coefs$a[7], b=coefs$b[7], c=coefs$c[7], d=coefs$d[7])) %>%
+  gather(Model, Value, c(Gauss, Quad, ModGauss, Logan10, Logan6))
+
+ggplot(df_plot, aes(x=as.factor(Min), y=Speed)) +
+  geom_errorbar(aes(ymin=Speed-se, ymax=Speed+se), width=0.4) +
+  geom_line() +
+  geom_point(size=1, shape=22, fill="white") +
+  geom_line(aes(y=Value, color=Model, group=Model), size=2) +
+  scale_x_discrete(breaks=df$Min, labels=df$Temp) +
+  scale_y_continuous(limits = c(0, NA)) +
+  xlab("Temperature (C)") +
+  facet_wrap(~Model, ncol = 1, scales = "free") +
+  theme_classic() +
+  theme(legend.position="none",
+        axis.text.x = element_text(size = 20),
+        axis.text.y = element_text(size = 20),
+        axis.title.x = element_text(size = 20),
+        axis.title.y = element_text(size = 20),
+        strip.text.x = element_text(size = 25))
+```
+
+### Models summary
+
+```{r model sumary all}
+r2 <- df_mean %>%
+  select(Temp, Speed) %>%
+  mutate(Gauss = model_gauss(Temp, a=coefs$a[1], b=coefs$b[1], c=coefs$c[1]),
+         Logan10 = model_logan10(Temp, alpha=coefs$alpha[2], k=coefs$k[2], rho=coefs$rho[2], dt=coefs$dt[2], tm=coefs$tm[2]),
+         Logan6 = model_logan6(Temp, psi=coefs$psi[3], rho=coefs$rho[3], dt=coefs$dt[3], tm=coefs$tm[3]),
+         ModGauss = model_modgauss(Temp, a=coefs$a[4], b=coefs$b[4], c=coefs$c[4], d=coefs$d[4]),
+         Quad = model_quad(Temp, a=coefs$a[5], b=coefs$b[5], c=coefs$c[5])) %>%
+  gather(Models, Fit, -Speed, -Temp) %>%
+  group_by(Models) %>%
+  summarise(r2=cor(Speed, Fit)^2)
+
+df_models <- data.frame(K=rowSums(!is.na(coefs)), stringsAsFactors = FALSE) %>%
+  cbind(., data.frame(Models=c("Gauss", "Logan10", "Logan6", "ModGauss", "Quad"),
+                      AIC=c(AIC(fit_gauss),
+                            AIC(fit_logan10),
+                            AIC(fit_logan6),
+                            AIC(fit_modgauss),
+                            AIC(fit_quad)),
+                      BIC=c(BIC(fit_gauss),
+                            BIC(fit_logan10),
+                            BIC(fit_logan6),
+                            BIC(fit_modgauss),
+                            BIC(fit_quad)))) %>%
+  mutate(deltaAIC=AIC-min(AIC),
+         weightAIC=Weights(AIC),
+         deltaBIC=BIC-min(BIC),
+         weightBIC=Weights(BIC)) %>%
+  select(Models, everything()) %>%
+  left_join(., r2, by="Models") %>%
+  select(Models, K, AIC, deltaAIC, weightAIC, BIC, deltaBIC, weightBIC, r2)
+
+datatable(df_models)
+```
+
+
