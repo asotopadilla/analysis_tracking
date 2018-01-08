@@ -16,10 +16,7 @@ df <- (lapply(files, function(x) read.csv(x, stringsAsFactors = FALSE)))
 names(df) <- files
 df <- do.call(rbind, df) %>%
   mutate(video=row.names(.),
-         video=gsub("\\_output.*","",video))
-
-# Cacultate variables per phase
-df <- df %>%
+         video=gsub("\\_output.*","",video)) %>%
   filter(led_1_status==1 | led_2_status==1)  %>%
   arrange(video, frame_idx) %>%
   group_by(video) %>%
@@ -35,10 +32,13 @@ df <- df %>%
   unique() %>%
   spread(Coord, Value) %>%
   arrange(video, phase, frame_idx, fly) %>%
-  group_by(video, phase, frame_idx) %>%
+  group_by(video, phase, frame_idx)
+
+# Change frame_idx and video to select whichever frame for a video you want to calculate the distance for
+df_single <- df %>%
   filter(frame_idx==73, video=="TC_Grp_6_f_2")
 
-dist(data.frame(df2$x,df2$y))
+dist(data.frame(df_single$x, df_single$y))
 
 
 
