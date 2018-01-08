@@ -1,17 +1,14 @@
-# Group dynamic analysis
+# Get dist of single frame
 
-# Load required packages
+### Run this chunck first ###
 if (!require(pacman)) install.packages(pacman)
 pacman::p_load(tidyverse, here, stringr, zoo)
 
-# Find where files to be analyzed live
 dir <- dirname(file.choose())
 setwd(dir)
 
-# Get all .csv files in chosen directory
 files <- list.files(pattern = "*.csv")
 
-# Bind them into one data frame with a variable indication which video it comes from
 df <- (lapply(files, function(x) read.csv(x, stringsAsFactors = FALSE)))
 names(df) <- files
 df <- do.call(rbind, df) %>%
@@ -33,6 +30,7 @@ df <- do.call(rbind, df) %>%
   spread(Coord, Value) %>%
   arrange(video, phase, frame_idx, fly) %>%
   group_by(video, phase, frame_idx)
+### ###
 
 # Change frame_idx and video to select whichever frame for a video you want to calculate the distance for
 df_single <- df %>%
