@@ -1,8 +1,11 @@
 # Group dynamic analysis
 
+######## Parameters #########
+mindist <- 10
+  
 # Load required packages
 if (!require(pacman)) install.packages(pacman)
-pacman::p_load(tidyverse, here, stringr, zoo, pbapply)
+pacman::p_load(tidyverse, here, stringr, zoo, pbapply, gmodels)
 
 #define functions
 cart_dist <- function(x1, x2, y1, y2){
@@ -43,9 +46,18 @@ df <- do.call(rbind, df) %>%
   filter(fly.x<fly.y) %>%
   mutate(dist=cart_dist(x.x, x.y, y.x, y.y)) %>%
   mutate_at(vars(fly.x, fly.y), funs(as.integer(.)+1)) %>%
+  filter(dist>=mindist) %>%
   group_by(video, phase) %>%
   summarise(mean_dist=mean(dist),
             meadian_dist=median(dist),
+            min_dist=min(dist),
+            max_dist=max(dist),
+            var_dist=var(dist),
+            sd_dist=sd(dist),
+            ci_mean_dist=ci(t(dist))[1],
+            ci_lower_dist=ci(t(dist))[2],
+            ci_upper_dist=ci(t(dist))[3],
+            ci_stderror_dist=ci(t(dist))[4],
             mean_shortest_dist=mean(min(dist)),
             median_shortest_dist=median(min(dist)),
             mean_longes_dist=mean(max(dist)),
