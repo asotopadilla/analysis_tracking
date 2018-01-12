@@ -46,19 +46,15 @@ df1 <- df %>%
               rename(fly_prev=fly, x_prev=x, y_prev=y),
             by = c("video", "phase", "frame_idx"="prev_frame")) %>%
   mutate(dist=cart_dist(x, x_prev, y, y_prev)) %>%
-  select(-prev_frame, -x_prev, -y_prev) %>%
+  select(-prev_frame) %>%
   group_by(frame_idx, video, phase, fly) %>%
   filter(dist==min(dist)) %>%
-  filter(n()>1)
+  mutate(mutilple_matches=ifelse(n()>1, 1, 0),
+         different_match=ifelse(fly!=fly_prev, 1, 0)) %>%
+  filter(mutilple_matches==1 || different_match==1)
 
 
 
 
-
-write.table(df, "group_analysis.csv", row.names = FALSE)
-
-
-
-
-
+#write.table(df, "group_analysis.csv", row.names = FALSE)
 
