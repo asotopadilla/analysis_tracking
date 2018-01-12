@@ -14,7 +14,7 @@ dir <- dirname(file.choose())
 setwd(dir)
 
 # Get all .csv files in chosen directory
-files <- list.files(pattern = "*ted.csv")
+files <- list.files(pattern = "*.csv")
 
 # Bind them into one data frame with a variable indication which video it comes from
 df <- (lapply(files, function(x) read.csv(x, stringsAsFactors = FALSE)))
@@ -46,16 +46,10 @@ df <- do.call(rbind, df) %>%
   group_by(video, phase) %>%
   summarise(mean_dist=mean(dist),
             meadian_dist=median(dist),
-            min_dist=min(dist),
-            max_dist=max(dist)
-  ) %>%
-  group_by(video, phase) %>%
-  summarise(mean_dist=mean(mean_dist),
-            meadian_dist=median(meadian_dist),
-            mean_shortest_dist=mean(min_dist),
-            median_shortest_dist=median(min_dist),
-            mean_longes_dist=mean(max_dist),
-            median_longest_dist=median(max_dist)
+            mean_shortest_dist=mean(min(dist)),
+            median_shortest_dist=median(min(dist)),
+            mean_longes_dist=mean(max(dist)),
+            median_longest_dist=median(max(dist))
             ) %>%
   ungroup()
 
