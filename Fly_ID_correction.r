@@ -14,7 +14,7 @@ dir <- dirname(file.choose())
 setwd(dir)
 
 # Get all .csv files in chosen directory
-files <- list.files(pattern = "*ted.csv")
+files <- list.files(pattern = "*.csv")[1:2]
 
 # Bind them into one data frame with a variable indication which video it comes from
 df <- (lapply(files, function(x) read.csv(x, stringsAsFactors = FALSE)))
@@ -36,28 +36,24 @@ df <- do.call(rbind, df) %>%
   select(-Metric) %>%
   unique() %>%
   spread(Coord, Value) %>%
-  arrange(video, phase, frame_idx, fly) %>%
+  arrange(video, phase, frame_idx, fly)
+
+df1 <- df %>%
+  mutate(prev_frame=frame_idx-1,
+         prev_frame=ifelse(prev_frame<=0, NA, prev_frame)) %>%
   left_join(.,
-            .[c("video", "frame_idx", "phase", "fly", "x", "y")],
-            by = c("video", "phase", "frame_idx")) %>%
-  filter(fly.x<fly.y) %>%
-  mutate(dist=cart_dist(x.x, x.y, y.x, y.y)) %>%
-  mutate_at(vars(fly.x, fly.y), funs(as.integer(.)+1)) %>%
-  group_by(video, phase) %>%
-  summarise(mean_dist=mean(dist),
-            meadian_dist=median(dist),
-            min_dist=min(dist),
-            max_dist=max(dist)
-  ) %>%
-  group_by(video, phase) %>%
-  summarise(mean_dist=mean(mean_dist),
-            meadian_dist=median(meadian_dist),
-            mean_shortest_dist=mean(min_dist),
-            median_shortest_dist=median(min_dist),
-            mean_longes_dist=mean(max_dist),
-            median_longest_dist=median(max_dist)
-            ) %>%
-  ungroup()
+            .[c("video", "phase", "fly", "x", "y", "prev_frame")] %>%
+              rename(fly_prev=fly, x_prev=x, y_prev=y),
+            by = c("video", "phase", "frame_idx"="prev_frame")) %>%
+  mutate(dist=cart_dist(x, x_prev, y, y_prev)) %>%
+  select(-prev_frame, -x_prev, -y_prev) %>%
+  group_by(frame_idx, video, phase, fly) %>%
+  filter(dist==min(dist)) %>%
+  filter(n()>1)
+
+
+
+
 
 write.table(df, "group_analysis.csv", row.names = FALSE)
 

@@ -1,14 +1,22 @@
-# Get dist of single frame
+# Group dynamic analysis
 
-### Run this chunck first ###
+# Load required packages
 if (!require(pacman)) install.packages(pacman)
-pacman::p_load(tidyverse, here, stringr, zoo)
+pacman::p_load(tidyverse, here, stringr, zoo, pbapply)
 
+#define functions
+cart_dist <- function(x1, x2, y1, y2){
+  sqrt((x2-x1)^2 + (y2-y1)^2)
+}
+
+# Find where files to be analyzed live
 dir <- dirname(file.choose())
 setwd(dir)
 
-files <- list.files(pattern = "*.csv")
+# Get all .csv files in chosen directory
+files <- list.files(pattern = "*ted.csv")
 
+# Bind them into one data frame with a variable indication which video it comes from
 df <- (lapply(files, function(x) read.csv(x, stringsAsFactors = FALSE)))
 names(df) <- files
 df <- do.call(rbind, df) %>%
@@ -29,14 +37,15 @@ df <- do.call(rbind, df) %>%
   unique() %>%
   spread(Coord, Value) %>%
   arrange(video, phase, frame_idx, fly) %>%
-  group_by(video, phase, frame_idx)
-### ###
+  left_join(.,
+            .[c("video", "frame_idx", "phase", "fly", "x", "y")],
+            by = c("video", "phase", "frame_idx")) %>%
+  filter(fly.x<fly.y) %>%
+  mutate(dist=cart_dist(x.x, x.y, y.x, y.y)) %>%
+  mutate_at(vars(fly.x, fly.y), funs(as.integer(.)+1)) %>%
+  unite("pair", c("fly.x", "fly.y"), sep="_") %>%
+  select(video, frame_idx, phase, pair, dist) %>%
+  spread(pair, dist)
 
-# Change frame_idx and video to select whichever frame for a video you want to calculate the distance for
-df_single <- df %>%
-  filter(frame_idx==73, video=="TC_Grp_6_f_2")
-
-dist(data.frame(df_single$x, df_single$y))
-
-
+write.table(df, "group_pair_dists.csv", row.names = FALSE)
 
