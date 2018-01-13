@@ -3,7 +3,7 @@
 ######## Parameters #########
 mindist <- 10
 maxdist <- 20
-time <- 5
+mintime <- 5
   
 # Load required packages
 if (!require(pacman)) install.packages(pacman)
