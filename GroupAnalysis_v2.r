@@ -14,8 +14,6 @@ cart_dist <- function(x1, x2, y1, y2){
   sqrt((x2-x1)^2 + (y2-y1)^2)
 }
 
-x<-df1$grp
-
 seq_grp <- function(x){
   grp<-rle(x) %>%
     do.call("cbind", .) %>%
