@@ -14,7 +14,7 @@ dir <- dirname(file.choose())
 setwd(dir)
 
 # Get all .csv files in chosen directory
-files <- list.files(pattern = "*.csv")[1:2]
+files <- list.files(pattern = "*t.csv")
 
 # Bind them into one data frame with a variable indication which video it comes from
 df <- (lapply(files, function(x) read.csv(x, stringsAsFactors = FALSE)))
@@ -48,10 +48,12 @@ df1 <- df %>%
   mutate(dist=cart_dist(x, x_prev, y, y_prev)) %>%
   select(-prev_frame) %>%
   group_by(frame_idx, video, phase, fly) %>%
-  filter(dist==min(dist)) %>%
+  filter(dist==min(dist) | is.na(dist)) %>%
   mutate(mutilple_matches=ifelse(n()>1, 1, 0),
          different_match=ifelse(fly!=fly_prev, 1, 0)) %>%
-  filter(mutilple_matches==1 || different_match==1)
+  filter(mutilple_matches==1 || different_match==1) %>%
+  group_by(frame_idx, video, phase) %>%
+  mutate(n_flies=n())
 
 
 
