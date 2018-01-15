@@ -65,10 +65,10 @@ df <- spread(df, Fly, Val) %>%
 }
 
 if (phasesummary==1) {
-df <- group_by(df, Min) %>%
-  summarise_each(funs(mean(., na.rm=TRUE), median(., na.rm=TRUE), min(., na.rm=TRUE), max(., na.rm=TRUE),
-                      count=sum(!is.na(.)), sum(., na.rm=TRUE)), -Min) %>%
-  mutate_each(funs(cumsum=cumsum(.)), (NCOL(.)-NROW(filenames)+1):NCOL(.))
+df1 <- group_by(df, Min) %>%
+  summarise_all(funs(mean(., na.rm=TRUE), median(., na.rm=TRUE), min(., na.rm=TRUE), max(., na.rm=TRUE),
+                      count=sum(!is.na(.)), sum(., na.rm=TRUE))) %>%
+  mutate_if(grepl("_sum", names(.)), funs(cumsum=cumsum(.)))
 }
 
 write.table(df, output[i], row.names = FALSE, col.names = TRUE, sep=",")
