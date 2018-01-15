@@ -57,6 +57,5 @@ df1 <- df %>%
 
 
 
-
-#write.table(df, "group_analysis.csv", row.names = FALSE)
+write.table(df1, "fly_dists.csv", row.names = FALSE)
 
