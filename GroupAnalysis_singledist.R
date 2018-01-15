@@ -14,7 +14,7 @@ dir <- dirname(file.choose())
 setwd(dir)
 
 # Get all .csv files in chosen directory
-files <- list.files(pattern = "*ted.csv")
+files <- list.files(pattern = "*.csv")
 
 # Bind them into one data frame with a variable indication which video it comes from
 df <- (lapply(files, function(x) read.csv(x, stringsAsFactors = FALSE)))
