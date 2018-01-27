@@ -142,7 +142,7 @@ df_speed <- df %>%
 
 df_out <- left_join(df_dists, df_speed, by = c("video", "phase"))
 
-rm(df, df_dist, df_speed)
+rm(df, df_dists, df_speed)
 
 write.table(df_out, "group_analysis.csv", row.names = FALSE)
 
