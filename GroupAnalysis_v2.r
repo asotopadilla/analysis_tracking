@@ -1,9 +1,10 @@
 # Group dynamic analysis
 
 ######## Parameters #########
-mindist <- 10
-maxdist <- 20
-mintime <- 5
+mindist <- 10 #minimum distance in pixels to consider flie clustered
+maxdist <- 20 #maximum distance in pixels to consider flies clustered
+mintime <- 5 #minumum number of frames to consider the flies clustered
+minspeed <- 2 #minimum speed i pixels/frame to count number of frames spent moving
   
 # Load required packages
 if (!require(pacman)) install.packages(pacman)
@@ -52,7 +53,9 @@ df <- do.call(rbind, df) %>%
   select(-Metric) %>%
   unique() %>%
   spread(Coord, Value) %>%
-  arrange(video, phase, frame_idx, fly) %>%
+  arrange(video, phase, frame_idx, fly)
+
+df_dists <- df %>%
   left_join(.,
             .[c("video", "frame_idx", "phase", "fly", "x", "y")],
             by = c("video", "phase", "frame_idx")) %>%
@@ -61,31 +64,87 @@ df <- do.call(rbind, df) %>%
   mutate_at(vars(fly.x, fly.y), funs(as.integer(.)+1)) %>%
   filter(dist>=mindist) %>%
   arrange(video, fly.x, fly.y, frame_idx) %>%
-  group_by(video, phase, fly.x, fly.y) %>%
-  mutate(grp=ifelse(dist>=mindist & dist<=maxdist, 1, 0),
-         grp=seq_grp(grp)) %>%
-  group_by(video, phase, fly.x, fly.y, grp) %>%
-  mutate(grp_final=ifelse(n()>=mintime & grp!=0, grp, 0)) %>%
   group_by(video, phase) %>%
-  summarise(num_encounters=NROW(unique(grp_final))-1,
-            mean_dist=mean(dist),
-            meadian_dist=median(dist),
-            min_dist=min(dist),
-            max_dist=max(dist),
-            var_dist=var(dist),
-            sd_dist=sd(dist),
-            mean_shortest_dist=mean(min(dist)),
-            median_shortest_dist=median(min(dist)),
-            mean_longes_dist=mean(max(dist)),
-            median_longest_dist=median(max(dist)),
-            ci_mean_dist=ci(t(dist))[1],
-            ci_lower_dist=ci(t(dist))[2],
-            ci_upper_dist=ci(t(dist))[3],
-            ci_stderror_dist=ci(t(dist))[4]
+  mutate(grp=ifelse(dist>=mindist & dist<=maxdist, 1, 0),
+         grp2=seq_grp(grp)) %>%
+  group_by(video, phase, fly.x, fly.y, grp2) %>%
+  mutate(grp_final=ifelse(n()>=mintime & grp2!=0, grp2, 0),
+         n=n(),
+         grp_n=ifelse(grp_final!=0 & row_number()==1, n(), NA)) %>%
+  group_by(video, phase, fly.x) %>%
+  mutate(min_dist=ifelse(row_number()==1, min(dist), NA),
+         max_dist=ifelse(row_number()==1, max(dist), NA)) %>%
+  group_by(video, phase) %>%
+  summarise(encounters_num=NROW(unique(grp_final))-1,
+            encounters_mean_length=mean(grp_n, na.rm=TRUE),
+            encounters_median_length=median(grp_n, na.rm=TRUE),
+            encounters_min_length=min(grp_n, na.rm=TRUE),
+            encounters_max_length=max(grp_n, na.rm=TRUE),
+            encounters_var_length=var(grp_n, na.rm=TRUE),
+            encounters_sd_length=sd(grp_n, na.rm=TRUE),
+            encounters_ci_mean_length=ci(t(grp_n), na.rm=TRUE)[1],
+            encounters_ci_lower_length=ci(t(grp_n), na.rm=TRUE)[2],
+            encounters_ci_upper_length=ci(t(grp_n), na.rm=TRUE)[3],
+            encounters_ci_stderror_length=ci(t(grp_n), na.rm=TRUE)[4],
+            dist_mean=mean(dist),
+            dist_median=median(dist),
+            dist_min=min(dist),
+            dist_max=max(dist),
+            dist_var=var(dist),
+            dist_sd=sd(dist),
+            dist_ci_mean=ci(t(dist))[1],
+            dist_ci_lower=ci(t(dist))[2],
+            dist_ci_upper=ci(t(dist))[3],
+            dist_ci_stderror=ci(t(dist))[4],
+            shortest_dist_mean=mean(min_dist, na.rm=TRUE),
+            shortest_dist_median=median(min_dist, na.rm=TRUE),
+            shortest_dist_min=min(min_dist, na.rm=TRUE),
+            shortest_dist_max=max(min_dist, na.rm=TRUE),
+            shortest_dist_var=var(min_dist, na.rm=TRUE),
+            shortest_dist_sd=sd(min_dist, na.rm=TRUE),
+            shortest_dist_ci_mean=ci(t(min_dist), na.rm=TRUE)[1],
+            shortest_dist_ci_lower=ci(t(min_dist), na.rm=TRUE)[2],
+            shortest_dist_ci_upper=ci(t(min_dist), na.rm=TRUE)[3],
+            shortest_dist_ci_stderror=ci(t(min_dist), na.rm=TRUE)[4],
+            longest_dist_mean=mean(max_dist, na.rm=TRUE),
+            longest_dist_median=median(max_dist, na.rm=TRUE),
+            longest_dist_min=min(max_dist, na.rm=TRUE),
+            longest_dist_max=max(max_dist, na.rm=TRUE),
+            longest_dist_var=var(max_dist, na.rm=TRUE),
+            longest_dist_sd=sd(max_dist, na.rm=TRUE),
+            longest_dist_ci_mean=ci(t(max_dist), na.rm=TRUE)[1],
+            longest_dist_ci_lower=ci(t(max_dist), na.rm=TRUE)[2],
+            longest_dist_ci_upper=ci(t(max_dist), na.rm=TRUE)[3],
+            longest_dist_ci_stderror=ci(t(max_dist), na.rm=TRUE)[4]
             ) %>%
+  ungroup() %>%
+  mutate_at(vars(-video), funs(ifelse(is.nan(.) | is.infinite(.), NA, .)))
+
+df_speed <- df %>%
+  arrange(video, fly, phase, frame_idx) %>%
+  group_by(video, fly) %>%
+  mutate(dist=cart_dist(x, lag(x), y, lag(y)),
+         move=ifelse(dist>=minspeed, 1, 0)) %>%
+  group_by(video, phase, fly) %>%
+  summarise(frames_moving=sum(move, na.rm = TRUE)) %>%
+  group_by(video, phase) %>%
+  summarise(frames_moving_mean=mean(frames_moving),
+            frames_moving_median=median(frames_moving),
+            frames_moving_min=min(frames_moving),
+            frames_moving_max=max(frames_moving),
+            frames_moving_var=var(frames_moving),
+            frames_moving_sd=sd(frames_moving),
+            frames_moving_ci_mean=ci(t(frames_moving))[1],
+            frames_moving_ci_lower=ci(t(frames_moving))[2],
+            frames_moving_ci_upper=ci(t(frames_moving))[3],
+            frames_moving_ci_stderror=ci(t(frames_moving))[4]) %>%
   ungroup()
 
-write.table(df, "group_analysis.csv", row.names = FALSE)
+df_out <- left_join(df_dists, df_speed, by = c("video", "phase"))
+
+rm(df, df_dist, df_speed)
+
+write.table(df_out, "group_analysis.csv", row.names = FALSE)
 
 
 
