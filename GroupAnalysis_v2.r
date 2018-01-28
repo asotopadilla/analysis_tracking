@@ -5,7 +5,7 @@ mindist <- 20 #minimum distance in pixels to consider flie clustered
 maxdist <- 30 #maximum distance in pixels to consider flies clustered
 mintime <- 10 #minumum number of frames to consider the flies clustered
 minspeed <- 5 #minimum speed in pixels/frame to count number of frames spent moving
-maxspeed <- 20 #maximum speed in pixels/frame fly can move before considering it a jump
+maxspeed <- 30 #maximum speed in pixels/frame fly can move before considering it a jump
 fps <- 30 #video fps
 width_px <- 777 #arena width in pixels
 width_cm <- 7 #arena width in centimeters
@@ -40,7 +40,7 @@ setwd(dir)
 if (!dir.exists(file.path(dir, "reults"))) dir.create(file.path(dir, "results"))
 
 # Get all .csv files in chosen directory
-files <- list.files(pattern = "*.csv")[1:3]
+files <- list.files(pattern = "*.csv")
 
 # Bind them into one data frame with a variable indication which video it comes from
 df <- (lapply(files, function(x) read.csv(x, stringsAsFactors = FALSE)))
