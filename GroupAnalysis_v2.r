@@ -66,21 +66,21 @@ df <- do.call(rbind, df) %>%
   mutate(filter=paste(video, phase, frame_idx, fly, sep = "_"))
 
 df_filter <- df %>%
-  mutate(prev_frame=frame_idx-1,
-         prev_frame=ifelse(prev_frame<=0, NA, prev_frame)) %>%
-  left_join(.,
-            .[c("video", "phase", "fly", "x", "y", "prev_frame")] %>%
-              rename(fly_prev=fly, x_prev=x, y_prev=y),
+  mutate(frame_idx=frame_idx+1,
+         frame_idx=ifelse(frame_idx<=0, NA, frame_idx)) %>%
+  rename(prev_frame=frame_idx, fly_prev=fly, x_prev=x, y_prev=y) %>%
+  left_join(df,
+            .,
             by = c("video", "phase", "frame_idx"="prev_frame")) %>%
   mutate(dist=cart_dist(x, x_prev, y, y_prev)) %>%
-  select(-prev_frame) %>%
   group_by(frame_idx, video, phase, fly) %>%
   arrange(fly, video, frame_idx) %>%
   filter(dist==min(dist) | is.na(dist)) %>%
   group_by(video, phase, fly) %>%
   mutate(different_match=ifelse(fly!=fly_prev, 1, 0),
          different_match=ifelse(lag(different_match)==1 | lead(different_match)==1, 1, different_match)) %>%
-  filter(different_match==1)
+  filter(different_match==1) %>%
+  ungroup()
 
 df_dists <- df %>%
   left_join(.,
