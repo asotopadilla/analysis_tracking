@@ -2,7 +2,7 @@
 
 # Load required packages
 if (!require(pacman)) install.packages(pacman)
-pacman::p_load(tidyverse, here, stringr, zoo, pbapply)
+pacman::p_load(tidyverse, here, stringr, zoo, pbapply, FSA)
 
 #define functions
 cart_dist <- function(x1, x2, y1, y2){
@@ -48,12 +48,25 @@ df1 <- df %>%
   mutate(dist=cart_dist(x, x_prev, y, y_prev)) %>%
   select(-prev_frame) %>%
   group_by(frame_idx, video, phase, fly) %>%
+  arrange(fly, video, frame_idx) %>%
   filter(dist==min(dist) | is.na(dist)) %>%
   mutate(mutilple_matches=ifelse(n()>1, 1, 0),
-         different_match=ifelse(fly!=fly_prev, 1, 0)) %>%
-  filter(mutilple_matches==1 || different_match==1) %>%
-  group_by(frame_idx, video, phase) %>%
-  mutate(n_flies=n())
+         different_match=ifelse(fly!=fly_prev, 1, 0))
+
+df2 <- df1 %>%
+  select(-x_prev, -y_prev) %>%
+  filter(fly==2) %>%
+  group_by(video, fly) %>%
+  mutate(remove=cumsum(different_match),
+         fly_close=ifelse(different_match, fly_prev, NA),
+         fly_close=na.locf(fly_close, na.rm = FALSE)) %>%
+  left_join(.,
+            df %>% rename(fly2=fly, x2=x, y2=y),
+            by = c("video", "phase", "frame_idx")) %>%
+  filter(fly2==fly_close) %>%
+  mutate(dist2=cart_dist(x, x2, y, y2)) %>%
+  select(-x2, -y2)
+  
 
 
 
