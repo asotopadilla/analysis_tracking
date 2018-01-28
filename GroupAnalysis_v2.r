@@ -5,7 +5,11 @@ mindist <- 20 #minimum distance in pixels to consider flie clustered
 maxdist <- 30 #maximum distance in pixels to consider flies clustered
 mintime <- 10 #minumum number of frames to consider the flies clustered
 minspeed <- 5 #minimum speed in pixels/frame to count number of frames spent moving
-  
+maxspeed <- 20 #maximum speed in pixels/frame fly can move before considering it a jump
+fps <- 30 #video fps
+width_px <- 777 #arena width in pixels
+width_cm <- 7 #arena width in centimeters
+
 # Load required packages
 if (!require(pacman)) install.packages(pacman)
 pacman::p_load(tidyverse, here, stringr, zoo, pbapply, gmodels)
@@ -26,6 +30,9 @@ seq_grp <- function(x){
   return(rep(grp$values, grp$lengths))
 }
 
+tocms <- fps*width_cm/width_px
+tocm <- width_cm/width_px
+
 # Find where files to be analyzed live
 dir <- dirname(file.choose())
 setwd(dir)
@@ -33,7 +40,7 @@ setwd(dir)
 if (!dir.exists(file.path(dir, "reults"))) dir.create(file.path(dir, "results"))
 
 # Get all .csv files in chosen directory
-files <- list.files(pattern = "*.csv")
+files <- list.files(pattern = "*.csv")[1:3]
 
 # Bind them into one data frame with a variable indication which video it comes from
 df <- (lapply(files, function(x) read.csv(x, stringsAsFactors = FALSE)))
@@ -70,7 +77,9 @@ df_filter <- df %>%
   group_by(frame_idx, video, phase, fly) %>%
   arrange(fly, video, frame_idx) %>%
   filter(dist==min(dist) | is.na(dist)) %>%
-  mutate(different_match=ifelse(fly!=fly_prev, 1, 0)) %>%
+  group_by(video, phase, fly) %>%
+  mutate(different_match=ifelse(fly!=fly_prev, 1, 0),
+         different_match=ifelse(lag(different_match)==1 | lead(different_match)==1, 1, different_match)) %>%
   filter(different_match==1)
 
 df_dists <- df %>%
@@ -89,9 +98,9 @@ df_dists <- df %>%
   group_by(video, phase, fly.x, fly.y, grp) %>%
   mutate(grp_final=ifelse(n()>=mintime & grp!=0, grp, 0),
          n=n(),
-         grp_n=ifelse(grp_final!=0 & row_number()==1, n(), NA)) %>%
+         grp_n=ifelse(grp_final!=0 & row_number()==1, n(), NA)/fps) %>%
   group_by(video, phase, fly.x) %>%
-  mutate(dist=ifelse(filter %in% df_filter$filter, NA, dist),
+  mutate(dist=ifelse(filter %in% df_filter$filter, NA, dist*tocm),
          min_dist=ifelse(row_number()==1, min(dist, na.rm=TRUE), NA),
          max_dist=ifelse(row_number()==1, max(dist, na.rm=TRUE), NA)) %>%
   group_by(video, phase) %>%
@@ -144,26 +153,47 @@ df_speed <- df %>%
   arrange(video, fly, phase, frame_idx) %>%
   group_by(video, fly) %>%
   mutate(dist=cart_dist(x, lag(x), y, lag(y)),
-         dist=ifelse(filter %in% df_filter$filter, NA, dist),
-         move=ifelse(dist>=minspeed, 1, 0)) %>%
-  group_by(video, phase, fly) %>%
-  summarise(frames_moving=sum(move, na.rm = TRUE)) %>%
+         dist=ifelse(filter %in% df_filter$filter | dist>=maxspeed, NA, dist),
+         move=ifelse(dist>=minspeed, 1, 0),
+         dist=dist*tocms) %>%
   group_by(video, phase) %>%
-  summarise(frames_moving_mean=mean(frames_moving, na.rm=TRUE),
-            frames_moving_median=median(frames_moving, na.rm=TRUE),
-            frames_moving_min=min(frames_moving, na.rm=TRUE),
-            frames_moving_max=max(frames_moving, na.rm=TRUE),
-            frames_moving_var=var(frames_moving, na.rm=TRUE),
-            frames_moving_sd=sd(frames_moving, na.rm=TRUE),
-            frames_moving_ci_mean=ci(t(frames_moving), na.rm=TRUE)[1],
-            frames_moving_ci_lower=ci(t(frames_moving), na.rm=TRUE)[2],
-            frames_moving_ci_upper=ci(t(frames_moving), na.rm=TRUE)[3],
-            frames_moving_ci_stderror=ci(t(frames_moving), na.rm=TRUE)[4]) %>%
+  summarise(speed_mean=mean(dist, na.rm=TRUE),
+            speed_median=median(dist, na.rm=TRUE),
+            speed_min=min(dist, na.rm=TRUE),
+            speed_max=max(dist, na.rm=TRUE),
+            speed_var=var(dist, na.rm=TRUE),
+            speed_sd=sd(dist, na.rm=TRUE),
+            speed_ci_mean=ci(t(dist), na.rm=TRUE)[1],
+            speed_ci_lower=ci(t(dist), na.rm=TRUE)[2],
+            speed_ci_upper=ci(t(dist), na.rm=TRUE)[3],
+            speed_ci_stderror=ci(t(dist), na.rm=TRUE)[4]) %>%
   ungroup()
 
-df_out <- left_join(df_dists, df_speed, by = c("video", "phase"))
+df_seconds_moving <- df %>%
+  arrange(video, fly, phase, frame_idx) %>%
+  group_by(video, fly) %>%
+  mutate(dist=cart_dist(x, lag(x), y, lag(y)),
+         dist=ifelse(filter %in% df_filter$filter, NA, dist),
+         move=ifelse(dist>=minspeed | dist<=maxspeed, 1, 0)) %>%
+  group_by(video, phase, fly) %>%
+  summarise(seconds_moving=sum(move, na.rm = TRUE)/fps) %>%
+  group_by(video, phase) %>%
+  summarise(seconds_moving_mean=mean(seconds_moving, na.rm=TRUE),
+            seconds_moving_median=median(seconds_moving, na.rm=TRUE),
+            seconds_moving_min=min(seconds_moving, na.rm=TRUE),
+            seconds_moving_max=max(seconds_moving, na.rm=TRUE),
+            seconds_moving_var=var(seconds_moving, na.rm=TRUE),
+            seconds_moving_sd=sd(seconds_moving, na.rm=TRUE),
+            seconds_moving_ci_mean=ci(t(seconds_moving), na.rm=TRUE)[1],
+            seconds_moving_ci_lower=ci(t(seconds_moving), na.rm=TRUE)[2],
+            seconds_moving_ci_upper=ci(t(seconds_moving), na.rm=TRUE)[3],
+            seconds_moving_ci_stderror=ci(t(seconds_moving), na.rm=TRUE)[4]) %>%
+  ungroup()
 
-rm(df, df_filter, df_dists, df_speed)
+df_out <- left_join(df_dists, df_speed, by = c("video", "phase")) %>%
+  left_join(., df_seconds_moving, by = c("video", "phase"))
+
+rm(df, df_filter, df_dists, df_speed, df_seconds_moving)
 
 write.table(df_out, "results/group_analysis_combined.csv", row.names = FALSE, sep=",")
 
