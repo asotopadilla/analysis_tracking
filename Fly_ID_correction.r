@@ -39,36 +39,20 @@ df <- do.call(rbind, df) %>%
   arrange(video, phase, frame_idx, fly)
 
 df1 <- df %>%
-  mutate(prev_frame=frame_idx-1,
-         prev_frame=ifelse(prev_frame<=0, NA, prev_frame)) %>%
-  left_join(.,
-            .[c("video", "phase", "fly", "x", "y", "prev_frame")] %>%
-              rename(fly_prev=fly, x_prev=x, y_prev=y),
+  mutate(frame_idx=frame_idx+1,
+         frame_idx=ifelse(frame_idx<=0, NA, frame_idx)) %>%
+  rename(prev_frame=frame_idx, fly_prev=fly, x_prev=x, y_prev=y) %>%
+  left_join(df,
+            .,
             by = c("video", "phase", "frame_idx"="prev_frame")) %>%
   mutate(dist=cart_dist(x, x_prev, y, y_prev)) %>%
-  select(-prev_frame) %>%
   group_by(frame_idx, video, phase, fly) %>%
   arrange(fly, video, frame_idx) %>%
   filter(dist==min(dist) | is.na(dist)) %>%
   mutate(mutilple_matches=ifelse(n()>1, 1, 0),
-         different_match=ifelse(fly!=fly_prev, 1, 0))
-
-df2 <- df1 %>%
-  select(-x_prev, -y_prev) %>%
-  filter(fly==2) %>%
-  group_by(video, fly) %>%
-  mutate(remove=cumsum(different_match),
-         fly_close=ifelse(different_match, fly_prev, NA),
-         fly_close=na.locf(fly_close, na.rm = FALSE)) %>%
-  left_join(.,
-            df %>% rename(fly2=fly, x2=x, y2=y),
-            by = c("video", "phase", "frame_idx")) %>%
-  filter(fly2==fly_close) %>%
-  mutate(dist2=cart_dist(x, x2, y, y2)) %>%
-  select(-x2, -y2)
+         different_match=ifelse(fly!=fly_prev, 1, 0),
+         different_match=ifelse(is.na(different_match), 0, different_match)) %>%
+  filter(different_match==1)
   
-
-
-
 write.table(df1, "fly_dists.csv", row.names = FALSE)
 
