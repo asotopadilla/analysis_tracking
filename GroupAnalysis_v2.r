@@ -1,10 +1,10 @@
 # Group dynamic analysis
 
 ######## Parameters #########
-mindist <- 10 #minimum distance in pixels to consider flie clustered
-maxdist <- 20 #maximum distance in pixels to consider flies clustered
-mintime <- 5 #minumum number of frames to consider the flies clustered
-minspeed <- 2 #minimum speed i pixels/frame to count number of frames spent moving
+mindist <- 20 #minimum distance in pixels to consider flie clustered
+maxdist <- 30 #maximum distance in pixels to consider flies clustered
+mintime <- 10 #minumum number of frames to consider the flies clustered
+minspeed <- 5 #minimum speed in pixels/frame to count number of frames spent moving
   
 # Load required packages
 if (!require(pacman)) install.packages(pacman)
@@ -30,6 +30,8 @@ seq_grp <- function(x){
 dir <- dirname(file.choose())
 setwd(dir)
 
+if (!dir.exists(file.path(dir, "reults"))) dir.create(file.path(dir, "results"))
+
 # Get all .csv files in chosen directory
 files <- list.files(pattern = "*.csv")
 
@@ -53,7 +55,23 @@ df <- do.call(rbind, df) %>%
   select(-Metric) %>%
   unique() %>%
   spread(Coord, Value) %>%
-  arrange(video, phase, frame_idx, fly)
+  arrange(video, phase, frame_idx, fly) %>%
+  mutate(filter=paste(video, phase, frame_idx, fly, sep = "_"))
+
+df_filter <- df %>%
+  mutate(prev_frame=frame_idx-1,
+         prev_frame=ifelse(prev_frame<=0, NA, prev_frame)) %>%
+  left_join(.,
+            .[c("video", "phase", "fly", "x", "y", "prev_frame")] %>%
+              rename(fly_prev=fly, x_prev=x, y_prev=y),
+            by = c("video", "phase", "frame_idx"="prev_frame")) %>%
+  mutate(dist=cart_dist(x, x_prev, y, y_prev)) %>%
+  select(-prev_frame) %>%
+  group_by(frame_idx, video, phase, fly) %>%
+  arrange(fly, video, frame_idx) %>%
+  filter(dist==min(dist) | is.na(dist)) %>%
+  mutate(different_match=ifelse(fly!=fly_prev, 1, 0)) %>%
+  filter(different_match==1)
 
 df_dists <- df %>%
   left_join(.,
@@ -66,14 +84,16 @@ df_dists <- df %>%
   arrange(video, fly.x, fly.y, frame_idx) %>%
   group_by(video, phase) %>%
   mutate(grp=ifelse(dist>=mindist & dist<=maxdist, 1, 0),
-         grp2=seq_grp(grp)) %>%
-  group_by(video, phase, fly.x, fly.y, grp2) %>%
-  mutate(grp_final=ifelse(n()>=mintime & grp2!=0, grp2, 0),
+         grp=ifelse(filter %in% df_filter$filter, 0, grp),
+         grp=seq_grp(grp)) %>%
+  group_by(video, phase, fly.x, fly.y, grp) %>%
+  mutate(grp_final=ifelse(n()>=mintime & grp!=0, grp, 0),
          n=n(),
          grp_n=ifelse(grp_final!=0 & row_number()==1, n(), NA)) %>%
   group_by(video, phase, fly.x) %>%
-  mutate(min_dist=ifelse(row_number()==1, min(dist), NA),
-         max_dist=ifelse(row_number()==1, max(dist), NA)) %>%
+  mutate(dist=ifelse(filter %in% df_filter$filter, NA, dist),
+         min_dist=ifelse(row_number()==1, min(dist, na.rm=TRUE), NA),
+         max_dist=ifelse(row_number()==1, max(dist, na.rm=TRUE), NA)) %>%
   group_by(video, phase) %>%
   summarise(encounters_num=NROW(unique(grp_final))-1,
             encounters_mean_length=mean(grp_n, na.rm=TRUE),
@@ -86,16 +106,16 @@ df_dists <- df %>%
             encounters_ci_lower_length=ci(t(grp_n), na.rm=TRUE)[2],
             encounters_ci_upper_length=ci(t(grp_n), na.rm=TRUE)[3],
             encounters_ci_stderror_length=ci(t(grp_n), na.rm=TRUE)[4],
-            dist_mean=mean(dist),
-            dist_median=median(dist),
-            dist_min=min(dist),
-            dist_max=max(dist),
-            dist_var=var(dist),
-            dist_sd=sd(dist),
-            dist_ci_mean=ci(t(dist))[1],
-            dist_ci_lower=ci(t(dist))[2],
-            dist_ci_upper=ci(t(dist))[3],
-            dist_ci_stderror=ci(t(dist))[4],
+            dist_mean=mean(dist, na.rm=TRUE),
+            dist_median=median(dist, na.rm=TRUE),
+            dist_min=min(dist, na.rm=TRUE),
+            dist_max=max(dist, na.rm=TRUE),
+            dist_var=var(dist, na.rm=TRUE),
+            dist_sd=sd(dist, na.rm=TRUE),
+            dist_ci_mean=ci(t(dist), na.rm=TRUE)[1],
+            dist_ci_lower=ci(t(dist), na.rm=TRUE)[2],
+            dist_ci_upper=ci(t(dist), na.rm=TRUE)[3],
+            dist_ci_stderror=ci(t(dist), na.rm=TRUE)[4],
             shortest_dist_mean=mean(min_dist, na.rm=TRUE),
             shortest_dist_median=median(min_dist, na.rm=TRUE),
             shortest_dist_min=min(min_dist, na.rm=TRUE),
@@ -124,27 +144,41 @@ df_speed <- df %>%
   arrange(video, fly, phase, frame_idx) %>%
   group_by(video, fly) %>%
   mutate(dist=cart_dist(x, lag(x), y, lag(y)),
+         dist=ifelse(filter %in% df_filter$filter, NA, dist),
          move=ifelse(dist>=minspeed, 1, 0)) %>%
   group_by(video, phase, fly) %>%
   summarise(frames_moving=sum(move, na.rm = TRUE)) %>%
   group_by(video, phase) %>%
-  summarise(frames_moving_mean=mean(frames_moving),
-            frames_moving_median=median(frames_moving),
-            frames_moving_min=min(frames_moving),
-            frames_moving_max=max(frames_moving),
-            frames_moving_var=var(frames_moving),
-            frames_moving_sd=sd(frames_moving),
-            frames_moving_ci_mean=ci(t(frames_moving))[1],
-            frames_moving_ci_lower=ci(t(frames_moving))[2],
-            frames_moving_ci_upper=ci(t(frames_moving))[3],
-            frames_moving_ci_stderror=ci(t(frames_moving))[4]) %>%
+  summarise(frames_moving_mean=mean(frames_moving, na.rm=TRUE),
+            frames_moving_median=median(frames_moving, na.rm=TRUE),
+            frames_moving_min=min(frames_moving, na.rm=TRUE),
+            frames_moving_max=max(frames_moving, na.rm=TRUE),
+            frames_moving_var=var(frames_moving, na.rm=TRUE),
+            frames_moving_sd=sd(frames_moving, na.rm=TRUE),
+            frames_moving_ci_mean=ci(t(frames_moving), na.rm=TRUE)[1],
+            frames_moving_ci_lower=ci(t(frames_moving), na.rm=TRUE)[2],
+            frames_moving_ci_upper=ci(t(frames_moving), na.rm=TRUE)[3],
+            frames_moving_ci_stderror=ci(t(frames_moving), na.rm=TRUE)[4]) %>%
   ungroup()
 
 df_out <- left_join(df_dists, df_speed, by = c("video", "phase"))
 
-rm(df, df_dists, df_speed)
+rm(df, df_filter, df_dists, df_speed)
 
-write.table(df_out, "group_analysis.csv", row.names = FALSE)
+write.table(df_out, "results/group_analysis_combined.csv", row.names = FALSE, sep=",")
+
+for (i in 1:(NCOL(df_out)-2)) {
+  df <- df_out[, c(1, 2, i+2)] %>%
+    spread(video, names(df_out)[i+2])
+    
+    write.table(df, paste0("results/group_analysis_", names(df_out)[i+2], ".csv"), row.names = FALSE, sep=",")
+    
+    rm(df)
+}
+
+
+
+
 
 
 
