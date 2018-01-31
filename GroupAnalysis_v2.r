@@ -174,7 +174,7 @@ df_seconds_moving <- df %>%
   group_by(video, fly) %>%
   mutate(dist=cart_dist(x, lag(x), y, lag(y)),
          dist=ifelse(filter %in% df_filter$filter, NA, dist),
-         move=ifelse(dist>=minspeed | dist<=maxspeed, 1, 0)) %>%
+         move=ifelse(dist>=minspeed & dist<=maxspeed, 1, 0)) %>%
   group_by(video, phase, fly) %>%
   summarise(seconds_moving=sum(move, na.rm = TRUE)/fps) %>%
   group_by(video, phase) %>%
