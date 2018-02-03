@@ -12,7 +12,7 @@ width_cm <- 7 #arena width in centimeters
 
 # Load required packages
 if (!require(pacman)) install.packages(pacman)
-pacman::p_load(tidyverse, here, stringr, zoo, pbapply, gmodels)
+pacman::p_load(tidyverse, here, stringr, zoo, pbapply, gmodels, corrplot, ggcorrplot)
 
 #define functions
 cart_dist <- function(x1, x2, y1, y2){
@@ -193,9 +193,17 @@ df_seconds_moving <- df %>%
 df_out <- left_join(df_dists, df_speed, by = c("video", "phase")) %>%
   left_join(., df_seconds_moving, by = c("video", "phase"))
 
+df_corr <- df_out %>%
+  select(contains("median"), contains("num")) %>%
+  mutate_all(funs(ifelse(is.na(.), 0, .))) %>%
+  cor
+
 rm(df, df_filter, df_dists, df_speed, df_seconds_moving)
 
 write.table(df_out, "results/group_analysis_combined.csv", row.names = FALSE, sep=",")
+
+write.table(as.data.frame(df_corr) %>% mutate(` `=row.names(.)) %>% select(` `, everything()),
+            "results/group_analysis_correlation.csv", row.names = FALSE, sep=",")
 
 for (i in 1:(NCOL(df_out)-2)) {
   df <- df_out[, c(1, 2, i+2)] %>%
@@ -206,12 +214,13 @@ for (i in 1:(NCOL(df_out)-2)) {
     rm(df)
 }
 
+cplot <- ggcorrplot(df_corr,
+           hc.order = TRUE, 
+           type = "lower", 
+           lab = TRUE, 
+           lab_size = 3, 
+           method="square", 
+           colors = c("tomato2", "white", "springgreen3"), 
+           ggtheme=theme_bw)
 
-
-
-
-
-
-
-
-
+ggsave("results/group_analysis_correlation.png", cplot, width = 6, height = 6)
