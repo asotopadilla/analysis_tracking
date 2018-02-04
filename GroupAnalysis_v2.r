@@ -9,7 +9,7 @@ maxspeed <- 30 #maximum speed in pixels/frame fly can move before considering it
 fps <- 30 #video fps
 width_px <- 777 #arena width in pixels
 width_cm <- 7 #arena width in centimeters
-focus_tile <- 2 #choose tile to look at for speed (1 - Left, 2 - Middle, 3 - Right, NA - All)
+focus_tile <- NA #choose tile to look at for speed (1 - Left, 2 - Middle, 3 - Right, NA - All)
 
 # Load required packages
 if (!require(pacman)) install.packages(pacman)
@@ -34,14 +34,14 @@ seq_grp <- function(x){
 tocms <- fps*width_cm/width_px
 tocm <- width_cm/width_px
 
-if (focus_tile==1) {
+if (is.na(focus_tile)) {
+  xfilter <- c(0, width_px)
+} else if (focus_tile==1) {
   xfilter <- c(0, width_px/3)
 } else if (focus_tile==2){
   xfilter <- c(width_px/3, 2*width_px/3)
 } else if (focus_tile==3) {
   xfilter <- c(2*width_px/3, width_px)
-} else {
-  xfilter <- c(0, width_px)
 }
 
 # Find where files to be analyzed live
@@ -166,7 +166,6 @@ df_speed <- df %>%
   group_by(video, fly) %>%
   mutate(dist=cart_dist(x, lag(x), y, lag(y)),
          dist=ifelse(filter %in% df_filter$filter | dist>=maxspeed, NA, dist),
-         move=ifelse(dist>=minspeed, 1, 0),
          dist=dist*tocms) %>%
   group_by(video, phase) %>%
   summarise(speed_mean=mean(dist, na.rm=TRUE),
