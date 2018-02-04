@@ -9,6 +9,7 @@ maxspeed <- 30 #maximum speed in pixels/frame fly can move before considering it
 fps <- 30 #video fps
 width_px <- 777 #arena width in pixels
 width_cm <- 7 #arena width in centimeters
+focus_tile <- 2 #choose tile to look at for speed (1 - Left, 2 - Middle, 3 - Right, NA - All)
 
 # Load required packages
 if (!require(pacman)) install.packages(pacman)
@@ -33,11 +34,21 @@ seq_grp <- function(x){
 tocms <- fps*width_cm/width_px
 tocm <- width_cm/width_px
 
+if (focus_tile==1) {
+  xfilter <- c(0, width_px/3)
+} else if (focus_tile==2){
+  xfilter <- c(width_px/3, 2*width_px/3)
+} else if (focus_tile==3) {
+  xfilter <- c(2*width_px/3, width_px)
+} else {
+  xfilter <- c(0, width_px)
+}
+
 # Find where files to be analyzed live
 dir <- dirname(file.choose())
 setwd(dir)
 
-if (!dir.exists(file.path(dir, "reults"))) dir.create(file.path(dir, "results"))
+if (!dir.exists(file.path(dir, "results"))) dir.create(file.path(dir, "results"))
 
 # Get all .csv files in chosen directory
 files <- list.files(pattern = "*.csv")
@@ -150,6 +161,7 @@ df_dists <- df %>%
   mutate_at(vars(-video), funs(ifelse(is.nan(.) | is.infinite(.), NA, .)))
 
 df_speed <- df %>%
+  filter(x>=xfilter[1] & x<=xfilter[2]) %>%
   arrange(video, fly, phase, frame_idx) %>%
   group_by(video, fly) %>%
   mutate(dist=cart_dist(x, lag(x), y, lag(y)),
@@ -193,12 +205,12 @@ df_seconds_moving <- df %>%
 df_out <- left_join(df_dists, df_speed, by = c("video", "phase")) %>%
   left_join(., df_seconds_moving, by = c("video", "phase"))
 
+rm(df, df_filter, df_dists, df_speed, df_seconds_moving)
+
 df_corr <- df_out %>%
   select(contains("median"), contains("num")) %>%
   mutate_all(funs(ifelse(is.na(.), 0, .))) %>%
   cor
-
-rm(df, df_filter, df_dists, df_speed, df_seconds_moving)
 
 write.table(df_out, "results/group_analysis_combined.csv", row.names = FALSE, sep=",")
 
