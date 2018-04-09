@@ -4,8 +4,8 @@
 minspeed <- 5 #minimum speed in pixels/frame to count number of frames spent moving
 maxspeed <- 30 #maximum speed in pixels/frame fly can move before considering it a jump
 fps <- 30 #video fps
-width_px <- 777 #arena width in pixels
-width_cm <- 7 #arena width in centimeters
+width_px <- 777 #arena width in pixels (767 Box1; 777 Box2)
+width_cm <- 7.5 #arena width in centimeters
 sep="," #specify file separator
 
 # Load required packages
