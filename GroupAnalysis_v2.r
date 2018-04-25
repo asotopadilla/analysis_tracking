@@ -10,6 +10,7 @@ fps <- 30 #video fps
 width_px <- 777 #arena width in pixels
 width_cm <- 7 #arena width in centimeters
 focus_tile <- NA #choose tile to look at for speed (1 - Left, 2 - Middle, 3 - Right, NA - All)
+sep="," #specify file separator
 
 # Load required packages
 if (!require(pacman)) install.packages(pacman)
@@ -54,7 +55,7 @@ if (!dir.exists(file.path(dir, "results"))) dir.create(file.path(dir, "results")
 files <- list.files(pattern = "*.csv")
 
 # Bind them into one data frame with a variable indication which video it comes from
-df <- (lapply(files, function(x) read.csv(x, stringsAsFactors = FALSE)))
+df <- (lapply(files, function(x) read.csv(x, sep=sep, stringsAsFactors = FALSE)))
 names(df) <- files
 df <- do.call(rbind, df) %>%
   mutate(video=row.names(.),
