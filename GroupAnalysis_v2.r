@@ -6,6 +6,7 @@ maxdist <- 30 #maximum distance in pixels to consider flies clustered
 mintime <- 10 #minumum number of frames to consider the flies clustered
 minspeed <- 5 #minimum speed in pixels/frame to count number of frames spent moving
 maxspeed <- 30 #maximum speed in pixels/frame fly can move before considering it a jump
+minbouttime <- 30 #minimum number of frames to consider a bout
 fps <- 30 #video fps
 width_px <- 777 #arena width in pixels
 width_cm <- 7 #arena width in centimeters
@@ -202,10 +203,35 @@ df_seconds_moving <- df %>%
             seconds_moving_ci_stderror=ci(t(seconds_moving), na.rm=TRUE)[4]) %>%
   ungroup()
 
-df_out <- left_join(df_dists, df_speed, by = c("video", "phase")) %>%
-  left_join(., df_seconds_moving, by = c("video", "phase"))
+df_bouts <- df %>%
+  arrange(video, phase, fly, frame_idx) %>%
+  group_by(video, phase, fly) %>%
+  mutate(dist=cart_dist(x, lag(x), y, lag(y)),
+         bout=ifelse(dist>=minspeed & dist<=maxspeed, 1, 0),
+         bout=ifelse(is.na(bout), 0, bout),
+         bout_grp=seq_grp(bout)) %>%
+  group_by(video, phase, fly, bout_grp) %>%
+  mutate(bout_time=ifelse(n()>=minbouttime & bout_grp!=0, n(), NA),
+         bouts=ifelse(is.na(bout_time), 0, bout_grp)) %>%
+  group_by(video, phase, fly) %>%
+  summarise(mean_num_bouts=NROW(unique(bouts))-1,
+            mean_mean_bout_time=mean(bout_time, na.rm = TRUE),
+            mean_min_bout_time=min(bout_time, na.rm = TRUE),
+            mean_max_bout_time=max(bout_time, na.rm = TRUE)) %>%
+  ungroup() %>%
+  mutate_at(vars(mean_mean_bout_time, mean_min_bout_time, mean_max_bout_time),
+            funs(ifelse(is.infinite(.), NA, ./fps))) %>%
+  select(-fly) %>%
+  group_by(video, phase) %>%
+  summarise_all(funs(mean(., na.rm = TRUE))) %>%
+  mutate_all(funs(ifelse(is.nan(.), NA, .))) %>%
+  ungroup()
 
-rm(df, df_filter, df_dists, df_speed, df_seconds_moving)
+df_out <- left_join(df_dists, df_speed, by = c("video", "phase")) %>%
+  left_join(., df_seconds_moving, by = c("video", "phase")) %>%
+  left_join(., df_bouts, by = c("video", "phase"))
+
+rm(df, df_filter, df_dists, df_speed, df_seconds_moving, df_bouts)
 
 df_corr <- df_out %>%
   select(contains("median"), contains("num")) %>%
