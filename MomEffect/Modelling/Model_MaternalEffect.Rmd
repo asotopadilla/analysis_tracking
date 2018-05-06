@@ -16,8 +16,8 @@ knitr::opts_chunk$set(echo = TRUE, fig.width=10)
 if (!require(pacman)) install.packages("pacman")
 pacman::p_load(plyr, dplyr, tidyr, DT, data.table, lubridate, ggplot2, plotly, nlme, MuMIn)
 
-dir <- dirname(file.choose())
-setwd(dir)
+#dirname(file.choose())
+setwd("/Users/neo2478/Documents/GitHub/analysis_tracking/MomEffect/Modelling")
 
 filenames <- list.files(dir, pattern="*.csv") ## Keep in folder only the .csv files that are of interest
 ```
@@ -32,17 +32,18 @@ filenames <- list.files(dir, pattern="*.csv") ## Keep in folder only the .csv fi
 df <- lapply(filenames, function(x) {
   read.csv(x, stringsAsFactors = FALSE) %>%
     mutate(Min=row_number()) %>%
-    gather(Time, Speed, -phase, -Min) %>%
+    gather(Mother, Speed, -phase, -Min) %>%
     rename(Temp=phase)
   })
 names(df) <- filenames
 df <- do.call("rbind", df) %>%
   mutate(Name=row.names(.),
-         Name=gsub("\\..*", "", Name)) %>%
+         Name=gsub("\\..*", "", Name),
+         Mother=gsub("X", "", Mother)) %>%
   separate(Name, c("Experiment", "Sex", "Condition"), "_") %>%
   filter(!is.na(Speed)) %>%
-  arrange(Experiment, Condition, Sex, Time, Min, Temp) %>%
-  group_by(Experiment, Condition, Sex, Time)
+  arrange(Experiment, Condition, Mother, Sex, Min, Temp) %>%
+  group_by(Experiment, Condition, Mother, Sex)
 
 grps <- group_indices(df)
 
@@ -52,13 +53,7 @@ df <- df %>%
   group_by(Experiment, Sex) %>%
   mutate(FlyID=FlyID-min(FlyID)+1) %>%
   ungroup() %>%
-  mutate(Time=hm(Time),
-         Hour=hour(round_date(as_datetime(Time), unit="hour"))) %>%
-  mutate(ToD=case_when(.$Hour < 12 ~ "Morning",
-                       .$Hour >= 12 & .$Hour < 15 ~ "Siesta",
-                       .$Hour >= 15 & .$Hour < 18 ~ "Afternoon",
-                       .$Hour >= 18 ~ "Evening")) %>%
-  select(Experiment, Sex, Condition, FlyID, Hour, ToD, Min, Temp, Speed) %>%
+  select(Experiment, Mother, Sex, Condition, FlyID, Min, Temp, Speed) %>%
   filter(Min>7, Experiment=="CurveFail")
 
 rm(grps)
@@ -69,13 +64,13 @@ datatable(df)
 #### Mean data all values ####
 ```{r data means}
 df_mean <- df %>%
-  group_by(Experiment, Condition, Sex, Min, Temp) %>% #Keep only what you want to model
+  group_by(Experiment, Condition, Mother, Sex, Min, Temp) %>% #Keep only what you want to model
   summarise(N=n(), sd=sd(Speed, na.rm=TRUE), se=sd(Speed, na.rm=TRUE)/sqrt(n()), Speed=mean(Speed, na.rm=TRUE)) %>%
-  group_by(Experiment, Condition, Sex) %>% #Keep only what you want to model
+  group_by(Experiment, Condition, Mother, Sex) %>% #Keep only what you want to model
   mutate(ciMult = qt(0.475 + .5, N-1),
          ci=se*ciMult) %>%
   ungroup() %>%
-  select(Experiment, Sex, Min, Temp, Speed, everything(), -ciMult) #Keep only what you want to model
+  select(Experiment, Mother, Sex, Min, Temp, Speed, everything(), -ciMult) #Keep only what you want to model
 
 datatable(df_mean)
 ```
