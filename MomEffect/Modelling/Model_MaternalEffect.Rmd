@@ -93,7 +93,7 @@ ggplot(df, aes(x=as.factor(Min), y=Speed, color=Sex)) +
 ### Mean data
 
 ```{r plot mean data}
-ggplot(df_mean, aes(x=as.factor(Min), y=Speed, color=Box, fill=Box, group=1)) + #Change to what you want to model
+ggplot(df_mean, aes(x=as.factor(Min), y=Speed, color=Mother, fill=Mother, group=1)) + #Change to what you want to model
   geom_errorbar(aes(ymin=Speed-se, ymax=Speed+se), width=0.5) +
   geom_point(size=3, shape=21, alpha=0.5) +
   scale_x_discrete(breaks=df$Min, labels=df$Temp) +
@@ -107,7 +107,7 @@ ggplot(df_mean, aes(x=as.factor(Min), y=Speed, color=Box, fill=Box, group=1)) + 
 ### Speed over temperature
 
 ```{r speed over tempplot, warning=FALSE}
-ggplot(df, aes(x=Temp, y=Speed, color=paste0(Condition, Box), shape=Sex)) + #Change to what you want to see
+ggplot(df, aes(x=Temp, y=Speed, color=paste0(Condition, Mother), shape=Sex)) + #Change to what you want to see
   geom_point() +
   geom_smooth(aes(group=1), method = 'loess') +
   scale_x_continuous(breaks=unique(df$Temp), labels=unique(df$Temp)) +
@@ -120,14 +120,14 @@ ggplot(df, aes(x=Temp, y=Speed, color=paste0(Condition, Box), shape=Sex)) + #Cha
 ### Regression Analysis
 
 ```{r regression}
-lm <- lm(Speed ~ poly(Temp, 3) + Sex + Condition + Box, data=df_mean)
+lm <- lm(Speed ~ poly(Temp, 3) + Sex + Condition + Mother, data=df_mean)
 
 summary(lm)
 
 df_plot <- df_mean %>%
   mutate(pred=predict(lm,.))
 
-ggplot(df_plot, aes(x=as.factor(Min), y=Speed, color=Box, fill=Box, group=1)) + #Change to what you want to see
+ggplot(df_plot, aes(x=as.factor(Min), y=Speed, color=Mother, fill=Mother, group=1)) + #Change to what you want to see
   geom_errorbar(aes(ymin=Speed-se, ymax=Speed+se), width=0.5) +
   geom_point(size=3, shape=21, alpha=0.5) +
   scale_x_discrete(breaks=df$Min, labels=df$Temp) +
