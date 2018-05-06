@@ -3,6 +3,7 @@
 ######## Parameters #########
 minspeed <- 5 #minimum speed in pixels/frame to count number of frames spent moving
 maxspeed <- 30 #maximum speed in pixels/frame fly can move before considering it a jump
+minbouttime <- 90 #minimum number of frames to consider a bout
 fps <- 30 #video fps
 width_px <- 777 #arena width in pixels (767 Box1; 777 Box2)
 width_cm <- 7.5 #arena width in centimeters
@@ -65,7 +66,6 @@ df_speed <- df %>%
   arrange(video, phase, frame_idx) %>%
   group_by(video) %>%
   mutate(dist=cart_dist(x, lag(x), y, lag(y)),
-         move=ifelse(dist>=minspeed, 1, 0),
          dist=dist*tocms) %>%
   group_by(video, phase) %>%
   summarise(speed_mean=mean(dist, na.rm=TRUE),
@@ -89,9 +89,29 @@ df_seconds_moving <- df %>%
   summarise(seconds_moving=sum(move, na.rm = TRUE)/fps) %>%
   ungroup()
 
-df_out <- left_join(df_seconds_moving, df_speed, by = c("video", "phase"))
+df_bouts <- df %>%
+  arrange(video, phase, frame_idx) %>%
+  group_by(video, phase) %>%
+  mutate(dist=cart_dist(x, lag(x), y, lag(y)),
+         bout=ifelse(dist>=minspeed & dist<=maxspeed, 1, 0),
+         bout=ifelse(is.na(bout), 0, bout),
+         bout_grp=seq_grp(bout)) %>%
+  group_by(video, phase, bout_grp) %>%
+  mutate(bout_time=ifelse(n()>=minbouttime & bout_grp!=0, n(), NA),
+         bouts=ifelse(is.na(bout_time), 0, bout_grp)) %>%
+  group_by(video, phase) %>%
+  summarise(num_bouts=NROW(unique(bouts))-1,
+            mean_bout_time=mean(bout_time, na.rm = TRUE),
+            min_bout_time=min(bout_time, na.rm = TRUE),
+            max_bout_time=max(bout_time, na.rm = TRUE)) %>%
+  ungroup() %>%
+  mutate_at(vars(mean_bout_time, min_bout_time, max_bout_time),
+            funs(ifelse(is.infinite(.), NA, ./fps)))
 
-rm(df, df_speed, df_seconds_moving)
+df_out <- left_join(df_seconds_moving, df_speed, by = c("video", "phase")) %>%
+  left_join(., df_bouts, df_speed, by = c("video", "phase"))
+
+rm(df, df_speed, df_seconds_moving, df_bouts)
 
 write.table(df_out, "results/singlefly_analysis_combined.csv", row.names = FALSE, sep=",")
 
