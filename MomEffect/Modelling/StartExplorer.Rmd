@@ -103,61 +103,61 @@ wellPanel(
 
 renderUI({
   if (input$models %in% c("Gaussian", "Quadratic", "Modified Gaussian", "Skewed Gaussian", "Exponential Gaussian"))
-    sliderInput("a", label = " a:",
+    numericInput("a", label = " a:",
                 min = -50, max = 50, value = 1, step = 0.001)
   })
 
 renderUI({
   if (input$models %in% c("Gaussian", "Quadratic", "Modified Gaussian", "Skewed Gaussian", "Exponential Gaussian"))
-    sliderInput("b", label = " b:",
+    numericInput("b", label = " b:",
                 min = -50, max = 50, value = 1, step = 0.001)
   })
 
 renderUI({
   if (input$models %in% c("Gaussian", "Quadratic", "Modified Gaussian", "Skewed Gaussian", "Exponential Gaussian"))
-    sliderInput("c", label = " c:",
+    numericInput("c", label = " c:",
                 min = -100, max = 100, value = 1, step = 0.001)
   })
 
 renderUI({
   if (input$models %in% c("Modified Gaussian", "Skewed Gaussian", "Exponential Gaussian"))
-    sliderInput("d", label = " d:",
+    numericInput("d", label = " d:",
                 min = -50, max = 50, value = 1, step = 0.001)
   })
 
 renderUI({
   if (input$models %in% c("Logan 6", "Logan 10"))
-    sliderInput("dt", label = " dt:",
+    numericInput("dt", label = " dt:",
                 min = 0, max = 50, value = 8, step = 0.01)
   })
 
 renderUI({
   if (input$models %in% c("Logan 6", "Logan 10"))
-    sliderInput("tm", label = " tm:",
+    numericInput("tm", label = " tm:",
                 min = 0, max = 50, value = 46, step = 0.01)
   })
 
 renderUI({
   if (input$models %in% c("Logan 6", "Logan 10"))
-    sliderInput("rho", label = " rho:",
+    numericInput("rho", label = " rho:",
                 min = -10, max = 10, value = 1, step = 0.001)
   })
 
 renderUI({
   if (input$models %in% c("Logan 6"))
-    sliderInput("psi", label = " psi:",
+    numericInput("psi", label = " psi:",
                 min = -10, max = 10, value = 1, step = 0.0001)
   })
 
 renderUI({
   if (input$models %in% c("Logan 10"))
-    sliderInput("alpha", label = " alpha:",
+    numericInput("alpha", label = " alpha:",
                 min = -50, max = 50, value = 1, step = 0.001)
   })
 
 renderUI({
   if (input$models %in% c("Logan 10"))
-    sliderInput("k", label = " k:",
+    numericInput("k", label = " k:",
                 min = -10, max = 450, value = 1, step = 1)
   })
 
