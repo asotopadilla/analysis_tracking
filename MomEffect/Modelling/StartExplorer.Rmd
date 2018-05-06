@@ -37,10 +37,7 @@ df <- do.call("rbind", df) %>%
          Name=gsub("\\..*", "", Name)) %>%
   separate(Name, c("Experiment", "Sex", "Condition"), "_") %>%
   filter(!is.na(Speed)) %>%
-  arrange(Experiment, Condition, Mother, Sex, Min, Temp) %>%
-  group_by(Temp) %>%
-  summarise(Speed=mean(Speed)) %>%
-  ungroup()
+  arrange(Experiment, Condition, Mother, Sex, Min, Temp)
 ```
 
 ```{r function list}
@@ -93,6 +90,14 @@ Column {.sidebar}
 ```{r}
 
 wellPanel(
+  selectInput("condition", label = "Condition:",
+              choices = unique(df$Condition),
+              multiple = TRUE),
+  
+  selectInput("sex", label = "Sex:",
+              choices = unique(df$Sex),
+              multiple = TRUE),
+  
   selectInput("models", label = "Model:",
               choices = c("Quadratic", "Gaussian", "Skewed Gaussian", "Modified Gaussian",
                           "Exponential Gaussian", "Logan 6", "Logan 10"), selected = "Gaussian"),
@@ -190,13 +195,44 @@ df_model <- reactive({
   
   return(df)
 })
+
+df_data <- reactive({
+  if (is.null(input$condition) & is.null(input$sex)) {
+    df %>%
+      group_by(Temp) %>%
+      summarise(Speed=mean(Speed, na.rm = TRUE)) %>%
+      ungroup() %>%
+      mutate(Group="All")
+  } else if (!is.null(input$condition) & is.null(input$sex)) {
+    df %>%
+      filter(Condition %in% input$condition) %>%
+      group_by(Condition, Temp) %>%
+      summarise(Speed=mean(Speed, na.rm = TRUE)) %>%
+      ungroup() %>%
+      rename(Group=Condition)
+  } else if (is.null(input$condition) & !is.null(input$sex)) {
+    df %>%
+      filter(Sex %in% input$sex) %>%
+      group_by(Sex, Temp) %>%
+      summarise(Speed=mean(Speed, na.rm = TRUE)) %>%
+      ungroup() %>%
+      rename(Group=Sex)
+  } else if (!is.null(input$condition) & !is.null(input$sex)) {
+    df %>%
+      filter(Condition %in% input$condition, Sex %in% input$sex) %>%
+      group_by(Condition, Sex, Temp) %>%
+      summarise(Speed=mean(Speed, na.rm = TRUE)) %>%
+      unite("Group", c("Condition","Sex"), sep =" - ")
+  }
+})
 ```
 
 ```{r}
 renderPlot({
   ggplot(df_model(), aes(x=Temp, y=Speed)) +
     geom_line() +
-    geom_line(data=df, aes(x=Temp, y=Speed), alpha=0.5, color="red") +
-    theme_bw()
+    geom_line(data=df_data(), aes(x=Temp, y=Speed, color=Group), alpha=0.5) +
+    theme_bw() +
+    labs(color="")
 })
 ```
