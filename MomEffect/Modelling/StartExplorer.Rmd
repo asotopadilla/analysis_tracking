@@ -1,0 +1,216 @@
+---
+title: "Start Explorer"
+author: "Andrea Soto Padilla"
+output: 
+  flexdashboard::flex_dashboard:
+    orientation: columns
+    theme: lumen
+runtime: shiny
+---
+
+```{r global, include=FALSE}
+if (!require(pacman)) install.packages("pacman")
+pacman::p_load(plyr, dplyr, tidyr, DT, data.table, lubridate, ggplot2)
+
+wd <- "~/Desktop/=/Results and Analysis/Cognition_KineticEffect/Gr28bD/TempCurve/R_TMV_TempCurve/Gr28bd"  ##Change accordingly
+
+setwd(wd)
+
+filenames <- list.files(wd, pattern="*.csv") ## Keep in folder only the .csv files that are of interest
+```
+
+```{r load and massage data}
+df_mean <- sapply(filenames,
+             read.csv,
+             sep=",",
+             dec = ".",
+             header=TRUE,
+             stringsAsFactors = FALSE,
+             simplify = FALSE) %>%
+  ldply(.) %>%
+  mutate(Name=gsub("\\..*", "", .id)) %>%
+  separate(Name, c("Experiment", "Sex", "Fly"), "_") %>%
+  select(-.id) %>%
+  gather(Time, Speed, -c(Temp, Min, Experiment, Sex, Fly)) %>%
+  filter(!is.na(Speed)) %>%
+  arrange(Experiment, Sex, Fly, Time, Min, Temp) %>%
+  group_by(Experiment, Sex, Fly, Time)
+
+grps <- group_indices(df_mean)
+
+df_mean <- df_mean %>%
+  ungroup() %>%
+  mutate(FlyID= grps) %>%
+  group_by(Experiment, Sex) %>%
+  mutate(FlyID=FlyID-min(FlyID)+1) %>%
+  ungroup() %>%
+  mutate(Time=hm(Time),
+         Hour=hour(round_date(as_datetime(Time), unit="hour"))) %>%
+  mutate(ToD=case_when(.$Hour < 12 ~ "Morning",
+                       .$Hour >= 12 & .$Hour < 15 ~ "Siesta",
+                       .$Hour >= 15 & .$Hour < 18 ~ "Afternoon",
+                       .$Hour >= 18 ~ "Evening")) %>%
+  select(Experiment, Sex, Fly, FlyID, Hour, ToD, Min, Temp, Speed) %>%
+  filter(Min>7, Experiment=="CurveFail") %>%
+  group_by(Temp) %>%
+  summarise(Speed=mean(Speed, na.rm=TRUE)) %>%
+  ungroup()
+```
+
+```{r function list}
+# Error function
+erf <- function(x) 2 * pnorm(x * sqrt(2)) - 1
+
+# Gaussian
+model_gauss <- function(Temp, a, b, c) {
+  a*exp(-0.5*(abs(Temp-b)/c)^2)
+}
+
+# Quadratic
+model_quad <- function(Temp, a, b, c) {
+  (a*Temp^2) + (b*Temp) + c
+}
+
+# Modified Gaussian
+model_modgauss <- function(Temp, a, b, c, d) {
+  a*exp(-0.5*(abs(Temp-b)/c)^d)
+}
+
+# Weibull
+model_weibull <- function(Temp, a, b, c, d) {
+  ( a*((d-1)/d)^((1-d)/d) )*( ( ((Temp-b)/c) + ((d-1)/d)^(d-1) )^(d-1) )*exp( -( ((Temp-b)/c) + ((d-1)/d)^(1/d) )^d ) + (d-1)/d
+}
+
+# Exponentially modified Gaussian
+model_expgauss <- function(Temp, a, b, c, d) {
+  ((a*c*sqrt(2*pi))/2*d)*exp( ((b-Temp)/d) + ((c^2)/(2*d^2)) )*( sign(d) - erf( ((b-Temp)/sqrt(2*c)) + (c/sqrt(2*d)) ) )
+}
+
+# Logan 6
+model_logan6 <- function(Temp, psi, rho, dt, tm) {
+  tau <- (tm - Temp)/dt
+  s <- psi*(exp(rho*Temp) - exp((rho*tm)-tau))
+  return(s)
+}
+
+# Logan 10
+model_logan10 <- function(Temp, alpha, k, rho, dt, tm) {
+  tau <- (tm - Temp)/dt
+  s <- alpha*(((1 + k*exp(-rho*Temp))^(-1)) - exp(-tau))
+  return(s)
+}
+```
+
+Column {.sidebar}
+-----------------------------------------------------------------------
+
+```{r}
+
+wellPanel(
+  selectInput("models", label = "Model:",
+              choices = c("Gaussian", "Quadratic", "Modified Gaussian", "Weibull",
+                          "Exponential Gaussian", "Logan 6", "Logan 10"), selected = "Gaussian"),
+  
+  sliderInput("temp", label = "Temperature Range:",
+              min = 0, max = 50, value = c(16, 46), step = 1)
+  )
+
+renderUI({
+  if (input$models %in% c("Gaussian", "Quadratic", "Modified Gaussian", "Weibull", "Exponential Gaussian"))
+    sliderInput("a", label = " a:",
+                min = -50, max = 50, value = 1, step = 0.001)
+  })
+
+renderUI({
+  if (input$models %in% c("Gaussian", "Quadratic", "Modified Gaussian", "Weibull", "Exponential Gaussian"))
+    sliderInput("b", label = " b:",
+                min = -50, max = 50, value = 1, step = 0.001)
+  })
+
+renderUI({
+  if (input$models %in% c("Gaussian", "Quadratic", "Modified Gaussian", "Weibull", "Exponential Gaussian"))
+    sliderInput("c", label = " c:",
+                min = -100, max = 100, value = 1, step = 0.001)
+  })
+
+renderUI({
+  if (input$models %in% c("Modified Gaussian", "Weibull", "Exponential Gaussian"))
+    sliderInput("d", label = " d:",
+                min = -50, max = 50, value = 1, step = 0.001)
+  })
+
+renderUI({
+  if (input$models %in% c("Logan 6", "Logan 10"))
+    sliderInput("dt", label = " dt:",
+                min = 0, max = 50, value = 8, step = 0.01)
+  })
+
+renderUI({
+  if (input$models %in% c("Logan 6", "Logan 10"))
+    sliderInput("tm", label = " tm:",
+                min = 0, max = 50, value = 46, step = 0.01)
+  })
+
+renderUI({
+  if (input$models %in% c("Logan 6", "Logan 10"))
+    sliderInput("rho", label = " rho:",
+                min = -10, max = 10, value = 1, step = 0.001)
+  })
+
+renderUI({
+  if (input$models %in% c("Logan 6"))
+    sliderInput("psi", label = " psi:",
+                min = -10, max = 10, value = 1, step = 0.0001)
+  })
+
+renderUI({
+  if (input$models %in% c("Logan 10"))
+    sliderInput("alpha", label = " alpha:",
+                min = -50, max = 50, value = 1, step = 0.001)
+  })
+
+renderUI({
+  if (input$models %in% c("Logan 10"))
+    sliderInput("k", label = " k:",
+                min = -10, max = 450, value = 1, step = 1)
+  })
+
+```
+
+Column
+-----------------------------------------------------------------------
+
+```{r data}
+df <- reactive({
+  Temp <- input$temp[1]:input$temp[2]
+  
+  if (input$models=="Gaussian") {
+    Speed=model_gauss(Temp, input$a, input$b, input$c)
+  } else if (input$models=="Quadratic") {
+    Speed=model_quad(Temp, input$a, input$b, input$c)
+  } else if (input$models=="Modified Gaussian") {
+    Speed=model_modgauss(Temp, input$a, input$b, input$c, input$d)
+  } else if (input$models=="Weibull") {
+    Speed=model_weibull(Temp, input$a, input$b, input$c, input$d)
+  } else if (input$models=="Exponential Gaussian") {
+    Speed=model_expgauss(Temp, input$a, input$b, input$c, input$d)
+  } else if (input$models=="Logan 6") {
+    Speed= model_logan6(Temp, input$psi, input$rho, input$dt, input$tm)
+  } else if (input$models=="Logan 10") {
+    Speed=model_logan10(Temp, input$alpha, input$k, input$rho, input$dt, input$tm)
+  }
+  
+  df <- data.frame(Temp=Temp, Speed=Speed)
+  
+  return(df)
+})
+```
+
+```{r}
+renderPlot({
+  ggplot(df(), aes(x=Temp, y=Speed)) +
+    geom_line() +
+    geom_line(data=df_mean, aes(x=Temp, y=Speed), alpha=0.5, color="red") +
+    theme_bw()
+})
+```
