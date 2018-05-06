@@ -30,89 +30,37 @@ filenames <- list.files(dir, pattern="*.csv") ## Keep in folder only the .csv fi
 
 ```{r load and massage data}
 df <- lapply(filenames, function(x) {
-  read.csv(x, stringsAsFactors = FALSE) %>%
+ read.csv(x, stringsAsFactors = FALSE) %>%
     mutate(Min=row_number()) %>%
     gather(Mother, Speed, -phase, -Min) %>%
+    mutate( Mother=gsub("X", "", Mother)) %>%
     rename(Temp=phase)
   })
 names(df) <- filenames
 df <- do.call("rbind", df) %>%
   mutate(Name=row.names(.),
-         Name=gsub("\\..*", "", Name),
-         Mother=gsub("X", "", Mother)) %>%
+         Name=gsub("\\..*", "", Name)) %>%
   separate(Name, c("Experiment", "Sex", "Condition"), "_") %>%
   filter(!is.na(Speed)) %>%
   arrange(Experiment, Condition, Mother, Sex, Min, Temp) %>%
-  group_by(Experiment, Condition, Mother, Sex)
-
-grps <- group_indices(df)
-
-df <- df %>%
-  ungroup() %>%
-  mutate(FlyID=grps) %>%
-  group_by(Experiment, Sex) %>%
-  mutate(FlyID=FlyID-min(FlyID)+1) %>%
-  ungroup() %>%
-  select(Experiment, Mother, Sex, Condition, FlyID, Min, Temp, Speed) %>%
   filter(Min>7, Experiment=="CurveFail")
 
-rm(grps)
-
 datatable(df)
-```
-
-#### Mean data all values ####
-```{r data means}
-df_mean <- df %>%
-  group_by(Experiment, Condition, Mother, Sex, Min, Temp) %>% #Keep only what you want to model
-  summarise(N=n(), sd=sd(Speed, na.rm=TRUE), se=sd(Speed, na.rm=TRUE)/sqrt(n()), Speed=mean(Speed, na.rm=TRUE)) %>%
-  group_by(Experiment, Condition, Mother, Sex) %>% #Keep only what you want to model
-  mutate(ciMult = qt(0.475 + .5, N-1),
-         ci=se*ciMult) %>%
-  ungroup() %>%
-  select(Experiment, Mother, Sex, Min, Temp, Speed, everything(), -ciMult) #Keep only what you want to model
-
-datatable(df_mean)
 ```
 
 ## Plot data
 
 ### All data
 ```{r plot data}
-ggplot(df, aes(x=as.factor(Min), y=Speed, color=Sex)) +
+ggplot(df, aes(x=as.factor(Min), y=Speed)) +
   geom_boxplot() +
   scale_x_discrete(breaks=df$Min, labels=df$Temp) +
   scale_y_continuous(limits = c(0, NA)) +
   xlab("Temperature (C)") +
-  facet_grid(Experiment ~ Sex) +
+  facet_grid(Condition ~ Sex) +
   theme_bw() +
   theme(legend.position="none",
         axis.text.x = element_text(angle = 90, hjust = 1))
-```
-
-### Mean data
-
-```{r plot mean data}
-ggplot(df_mean, aes(x=as.factor(Min), y=Speed, color=Mother, fill=Mother, group=1)) + #Change to what you want to model
-  geom_errorbar(aes(ymin=Speed-se, ymax=Speed+se), width=0.5) +
-  geom_point(size=3, shape=21, alpha=0.5) +
-  scale_x_discrete(breaks=df$Min, labels=df$Temp) +
-  scale_y_continuous(limits = c(0, NA)) +
-  xlab("Temperature (C)") +
-  facet_grid(Condition ~ Sex) + #Change to what you want to see
-  theme_bw() +
-  theme(axis.text.x = element_text(angle = 90, hjust = 1))
-```
-
-### Speed over temperature
-
-```{r speed over tempplot, warning=FALSE}
-ggplot(df, aes(x=Temp, y=Speed, color=paste0(Condition, Mother), shape=Sex)) + #Change to what you want to see
-  geom_point() +
-  geom_smooth(aes(group=1), method = 'loess') +
-  scale_x_continuous(breaks=unique(df$Temp), labels=unique(df$Temp)) +
-  scale_y_continuous(limits = c(0, NA)) +
-  theme_bw()
 ```
 
 ## Comparison of thermal performance curves
@@ -120,20 +68,19 @@ ggplot(df, aes(x=Temp, y=Speed, color=paste0(Condition, Mother), shape=Sex)) + #
 ### Regression Analysis
 
 ```{r regression}
-lm <- lm(Speed ~ poly(Temp, 3) + Sex + Condition + Mother, data=df_mean)
+lm <- lm(Speed ~ poly(Temp, 3) + Sex + Condition + Mother, data=df)
 
 summary(lm)
 
-df_plot <- df_mean %>%
+df_plot <- df %>%
   mutate(pred=predict(lm,.))
 
-ggplot(df_plot, aes(x=as.factor(Min), y=Speed, color=Mother, fill=Mother, group=1)) + #Change to what you want to see
-  geom_errorbar(aes(ymin=Speed-se, ymax=Speed+se), width=0.5) +
+ggplot(df_plot, aes(x=as.factor(Min), y=Speed, color=Sex, fill=Sex, group=1)) + #Change to what you want to see
   geom_point(size=3, shape=21, alpha=0.5) +
   scale_x_discrete(breaks=df$Min, labels=df$Temp) +
   scale_y_continuous(limits = c(0, NA)) +
   xlab("Temperature (C)") +
-  facet_grid(Condition ~ Sex) + #Change to what you want to see
+  facet_wrap(~Condition) + #Change to what you want to see
   theme_bw() +
   theme(axis.text.x = element_text(angle = 90, hjust = 1))
 ```
@@ -158,9 +105,6 @@ model_gauss <- function(Temp, a, b, c) {
 model_skewedgauss <- function(Temp, a, b, c, d) {
   a*exp(-0.5*(abs(Temp-b)/c)^2)*(1 + erf((d*(Temp-b))/(sqrt(2)*c)))
 }
-
-
-plot(model_skewedgauss(1:50, 1, 25, 5, -5))
 
 # Modified Gaussian
 model_modgauss <- function(Temp, a, b, c, d) {
@@ -193,27 +137,27 @@ model_logan10 <- function(Temp, alpha, k, rho, dt, tm) {
 fit_quad <- nlme(Speed~model_quad(Temp, a, b, c),
                  data = df,
                  fixed = list(a~1,b~1,c~1),
-                 random = list(FlyID=pdDiag(list(a~1,b~1,c~1))),
+                 random = list(Mother=pdDiag(list(a~1,b~1,c~1))),
                  start = c(a=-0.069, b=0.42, c=-5.07))
 
 fit_gauss <- nlme(Speed~model_gauss(Temp, a, b, c),
                   data = df,
                   fixed = list(a~1,b~1,c~1),
-                  random = list(FlyID=pdDiag(list(a~1,b~1,c~1))),
+                  random = list(Mother=pdDiag(list(a~1,b~1,c~1))),
                   start = c(0.9,35.2,5.82))   
 
 fit_skewedgauss <- nlme(Speed~model_skewedgauss(Temp, a, b, c, d),
                         data = df,
                         fixed = list(a~1,b~1,c~1,d~1),
-                        random = list(FlyID=pdDiag(list(a~1,b~1,c~1,d~1))),
+                        random = list(Mother=pdDiag(list(a~1,b~1,c~1,d~1))),
                         start = c(a=0.9, b=35.2, c=5.82, d=1),
-                     control=list(msVerbose = FALSE,
-                                  pnlsTol=10))   
+                        control=list(msVerbose = FALSE,
+                                     pnlsTol=10))   
 
 fit_modgauss <- nlme(Speed~model_modgauss(Temp, a, b, c, d),
                      data = df,
                      fixed = list(a~1,b~1,c~1,d~1),
-                     random = list(FlyID=pdDiag(list(a~1,b~1,c~1,d~1))),
+                     random = list(Mother=pdDiag(list(a~1,b~1,c~1,d~1))),
                      start = c(a=0.9, b=35.7, c=5.78, d=1.50),
                      control=list(msVerbose = FALSE,
                                   pnlsTol=10))
@@ -221,7 +165,7 @@ fit_modgauss <- nlme(Speed~model_modgauss(Temp, a, b, c, d),
 fit_expgauss <- nlme(Speed~model_expgauss(Temp, a, b, c, d),
                      data = df,
                      fixed = a + b + c + d ~ 1,
-                     random = list(FlyID=pdDiag(list(a~1,b~1,c~1,d~1))),
+                     random = list(Mother=pdDiag(list(a~1,b~1,c~1,d~1))),
                      start = c(a=0.0000002, b=20, c=2, d=20),
                      control=list(msVerbose = FALSE,
                                pnlsTol=10))
@@ -229,7 +173,7 @@ fit_expgauss <- nlme(Speed~model_expgauss(Temp, a, b, c, d),
 fit_logan6 <- nlme(Speed~model_logan6(Temp, psi, rho, dt, tm),
                   data = df,
                   fixed = psi + rho + dt + tm ~ 1,
-                  random = list(FlyID=pdDiag(list(psi~1,rho~1,dt~1,tm~1))),
+                  random = list(Mother=pdDiag(list(psi~1,rho~1,dt~1,tm~1))),
                   start = c(rho=0.09, psi=0.072, dt=5.3, tm=44),
                   control=list(msVerbose = FALSE,
                                pnlsTol=10))
@@ -237,7 +181,7 @@ fit_logan6 <- nlme(Speed~model_logan6(Temp, psi, rho, dt, tm),
 fit_logan10 <- nlme(Speed~model_logan10(Temp, alpha, k, rho, dt, tm),
                     data = df,
                     fixed = alpha + k + rho + dt + tm ~ 1,
-                    random = list(FlyID=pdDiag(list(alpha~1,k~1,rho~1,dt~1,tm~1))),
+                    random = list(Mother=pdDiag(list(alpha~1,k~1,rho~1,dt~1,tm~1))),
                     start = c(alpha=3.268, k=345, rho=0.174, dt=7.31, tm=43.74),
                     control=list(msVerbose = FALSE,
                                pnlsTol=10))
@@ -254,7 +198,7 @@ coefs <- data.frame(Quad=coef(fit_quad),
   as.data.frame() %>%
   mutate(Row=row.names(.)) %>%
   separate(Row, c("Model", "Coef"), "[.]") %>%
-  gather(Fly, Val, -c(Model, Coef)) %>%
+  gather(Mother, Val, -c(Model, Coef)) %>%
   group_by(Model, Coef) %>%
   summarise(Val=mean(Val)) %>%
   ungroup() %>%
@@ -267,7 +211,7 @@ datatable(coefs)
 ### Plot models from all data over graph of mean data
 
 ```{r model plot all, warning=FALSE}
-df_plot <- df_mean %>%
+df_plot <- df %>%
   mutate(Quad = model_quad(Temp, a=coefs$a[1], b=coefs$b[1], c=coefs$c[1]),
          Gauss = model_gauss(Temp, a=coefs$a[2], b=coefs$b[2], c=coefs$c[2]),
          SkewedGauss = model_skewedgauss(Temp, a=coefs$a[3], b=coefs$b[3], c=coefs$c[3], d=coefs$d[3]),
@@ -278,7 +222,6 @@ df_plot <- df_mean %>%
   gather(Model, Value, c(Quad, Gauss, SkewedGauss, ModGauss, ExpGauss, Logan10, Logan6))
 
 ggplot(df_plot, aes(x=as.factor(Min), y=Speed)) +
-  geom_errorbar(aes(ymin=Speed-se, ymax=Speed+se), width=0.5) +
   geom_line() +
   geom_point(size=1, shape=22, fill="white") +
   geom_line(aes(y=Value, color=Model, group=Model)) +
