@@ -142,9 +142,40 @@ ggplot(df_plot, aes(x=as.factor(Min), y=Speed, color=Box, fill=Box, group=1)) + 
   theme_bw() +
   theme(axis.text.x = element_text(angle = 90, hjust = 1))
 ```
+
 ## Model Fitting
 
 ```{r function list}
+# Error function
+erf <- function(x) 2 * pnorm(x * sqrt(2)) - 1
+
+# Quadratic
+model_quad <- function(Temp, a, b, c) {
+  (a*Temp^2) + (b*Temp) + c
+}
+
+# Gaussian
+model_gauss <- function(Temp, a, b, c) {
+  a*exp(-0.5*(abs(Temp-b)/c)^2)
+}
+
+# Skewed Gaussian
+model_skewedgauss <- function(Temp, a, b, c, d) {
+  a*exp(-0.5*(abs(Temp-b)/c)^2)*(1 + erf((d*(Temp-b))/(sqrt(2)*c)))
+}
+
+
+plot(model_skewedgauss(1:50, 1, 25, 5, -5))
+
+# Modified Gaussian
+model_modgauss <- function(Temp, a, b, c, d) {
+  a*exp(-0.5*(abs(Temp-b)/c)^d)
+}
+
+# Exponentially modified Gaussian
+model_expgauss <- function(Temp, a, b, c, d) {
+  ((a*c*sqrt(2*pi))/2*d)*exp( ((b-Temp)/d) + ((c^2)/(2*d^2)) )*( sign(d) - erf( ((b-Temp)/sqrt(2*c)) + (c/sqrt(2*d)) ) )
+}
 
 # Logan 6
 model_logan6 <- function(Temp, psi, rho, dt, tm) {
@@ -159,32 +190,46 @@ model_logan10 <- function(Temp, alpha, k, rho, dt, tm) {
   s <- alpha*(((1 + k*exp(-rho*Temp))^(-1)) - exp(-tau))
   return(s)
 }
-
-
-```
-
-```{r start finder, echo=FALSE, eval=FALSE} 
-model<-NULL     ## Brute force: Randomly pick starting parameters to look for conversion
-while(is.null(model)){
-  try(
-    {start <- round(runif(4, -30, 30), 2) # Change first number to number of coefficients in first line of model
-    # Substitute this model for model of interest and change start values to start,
-    model <- nlme(Speed~model_weibull(Temp, a, b, c, d),
-                          data = df,
-                          fixed = a + b + c + d ~ 1,
-                          random = list(FlyID=pdDiag(list(a~1,b~1,c~1,d~1))),
-                          start = start,
-                     control = list(msVerbose=TRUE))        
-    
-      }, silent = FALSE)
-}
 ```
 
 ### Fit models to data
 
 ```{r coeficients all}
-a<-nls(Speed~model_gauss(Temp, a, b, c),                 #Simple model to test coefficients after making curve
-                  data = df, start = c(a=1.5, b=31, c=4))
+fit_quad <- nlme(Speed~model_quad(Temp, a, b, c),
+                 data = df,
+                 fixed = list(a~1,b~1,c~1),
+                 random = list(FlyID=pdDiag(list(a~1,b~1,c~1))),
+                 start = c(a=-0.069, b=0.42, c=-5.07))
+
+fit_gauss <- nlme(Speed~model_gauss(Temp, a, b, c),
+                  data = df,
+                  fixed = list(a~1,b~1,c~1),
+                  random = list(FlyID=pdDiag(list(a~1,b~1,c~1))),
+                  start = c(0.9,35.2,5.82))   
+
+fit_skewedgauss <- nlme(Speed~model_skewedgauss(Temp, a, b, c, d),
+                        data = df,
+                        fixed = list(a~1,b~1,c~1,d~1),
+                        random = list(FlyID=pdDiag(list(a~1,b~1,c~1,d~1))),
+                        start = c(a=0.9, b=35.2, c=5.82, d=1),
+                     control=list(msVerbose = FALSE,
+                                  pnlsTol=10))   
+
+fit_modgauss <- nlme(Speed~model_modgauss(Temp, a, b, c, d),
+                     data = df,
+                     fixed = list(a~1,b~1,c~1,d~1),
+                     random = list(FlyID=pdDiag(list(a~1,b~1,c~1,d~1))),
+                     start = c(a=0.9, b=35.7, c=5.78, d=1.50),
+                     control=list(msVerbose = FALSE,
+                                  pnlsTol=10))
+
+fit_expgauss <- nlme(Speed~model_expgauss(Temp, a, b, c, d),
+                     data = df,
+                     fixed = a + b + c + d ~ 1,
+                     random = list(FlyID=pdDiag(list(a~1,b~1,c~1,d~1))),
+                     start = c(a=0.0000002, b=20, c=2, d=20),
+                     control=list(msVerbose = FALSE,
+                               pnlsTol=10))
 
 fit_logan6 <- nlme(Speed~model_logan6(Temp, psi, rho, dt, tm),
                   data = df,
@@ -195,20 +240,21 @@ fit_logan6 <- nlme(Speed~model_logan6(Temp, psi, rho, dt, tm),
                                pnlsTol=10))
 
 fit_logan10 <- nlme(Speed~model_logan10(Temp, alpha, k, rho, dt, tm),
-                  data = df,
-                  fixed = alpha + k + rho + dt + tm ~ 1,
-                  random = list(FlyID=pdDiag(list(alpha~1,k~1,rho~1,dt~1,tm~1))),
-                  start = c(alpha=3.268, k=345, rho=0.174, dt=7.31, tm=43.74),
-                  control=list(msVerbose = FALSE,
+                    data = df,
+                    fixed = alpha + k + rho + dt + tm ~ 1,
+                    random = list(FlyID=pdDiag(list(alpha~1,k~1,rho~1,dt~1,tm~1))),
+                    start = c(alpha=3.268, k=345, rho=0.174, dt=7.31, tm=43.74),
+                    control=list(msVerbose = FALSE,
                                pnlsTol=10))
 
-dflogan <- df %>% 
-filter(Temp %in% c(16, 18, 20, 22, 24, 26, 28, 30, 32, 34, 36, 38, 40))
-
-
-coefs <- data.frame(Logan6=coef(fit_logan6),           # Creates coefficient table for models
-                    Logan10=coef(fit_logan10))%>%
-                    
+# Creates coefficient table for models
+coefs <- data.frame(Quad=coef(fit_quad),
+                    Gauss=coef(fit_gauss),                 
+                    SkewedGauss=coef(fit_skewedgauss),
+                    ModGauss=coef(fit_modgauss),
+                    ExpGauss=coef(fit_expgauss),
+                    Logan6=coef(fit_logan6),
+                    Logan10=coef(fit_logan10)) %>%
   t() %>%
   as.data.frame() %>%
   mutate(Row=row.names(.)) %>%
@@ -227,9 +273,14 @@ datatable(coefs)
 
 ```{r model plot all, warning=FALSE}
 df_plot <- df_mean %>%
-  mutate(Logan10 = model_logan10(Temp, alpha=coefs$alpha[2], k=coefs$k[2], rho=coefs$rho[2], dt=coefs$dt[2], tm=coefs$tm[2]),
-         Logan6 = model_logan6(Temp, psi=coefs$psi[3], rho=coefs$rho[3], dt=coefs$dt[3], tm=coefs$tm[3]))%>%
-  gather(Model, Value, c(Gauss, Quad, ModGauss, Logan10, Logan6))
+  mutate(Quad = model_quad(Temp, a=coefs$a[1], b=coefs$b[1], c=coefs$c[1]),
+         Gauss = model_gauss(Temp, a=coefs$a[2], b=coefs$b[2], c=coefs$c[2]),
+         SkewedGauss = model_skewedgauss(Temp, a=coefs$a[3], b=coefs$b[3], c=coefs$c[3], d=coefs$d[3]),
+         ModGauss = model_modgauss(Temp, a=coefs$a[4], b=coefs$b[4], c=coefs$c[4], d=coefs$d[4]),
+         ExpGauss = model_expgauss(Temp, a=coefs$a[5], b=coefs$b[5], c=coefs$c[5], d=coefs$d[5]),
+         Logan10 = model_logan10(Temp, alpha=coefs$alpha[6], k=coefs$k[6], rho=coefs$rho[6], dt=coefs$dt[6], tm=coefs$tm[6]),
+         Logan6 = model_logan6(Temp, psi=coefs$psi[7], rho=coefs$rho[7], dt=coefs$dt[7], tm=coefs$tm[7])) %>%
+  gather(Model, Value, c(Quad, Gauss, SkewedGauss, ModGauss, ExpGauss, Logan10, Logan6))
 
 ggplot(df_plot, aes(x=as.factor(Min), y=Speed)) +
   geom_errorbar(aes(ymin=Speed-se, ymax=Speed+se), width=0.5) +
@@ -248,17 +299,28 @@ ggplot(df_plot, aes(x=as.factor(Min), y=Speed)) +
 ### Models summary
 
 ```{r model sumary all}
-df_models <- data.frame(K=rowSums(!is.na(coefs))) %>%
-  cbind(., data.frame(Models=c("Logan10", "Logan6"),
-                      AIC=c(AIC(fit_gauss),
+df_models <- data.frame(K=rowSums(!is.na(coefs)), stringsAsFactors = FALSE) %>%
+  cbind(., data.frame(Models=c("Quad", "Gauss", "SkewedGauss", "ModGauss", "ExpGauss", "Logan10", "Logan6")),
+                      AIC=c(AIC(fit_quad),
+                            AIC(fit_gauss),
+                            AIC(fit_skewedgauss),
+                            AIC(fit_modgauss),
+                            AIC(fit_expgauss),
                             AIC(fit_logan10),
-                            AIC(fit_logan6),
-                          
-                            ))) %>%
-                            
+                            AIC(fit_logan6)),
+                      BIC=c(BIC(fit_quad),
+                            BIC(fit_gauss),
+                            BIC(fit_skewedgauss),
+                            BIC(fit_modgauss),
+                            BIC(fit_expgauss),
+                            BIC(fit_logan10),
+                            BIC(fit_logan6))) %>%
   mutate(deltaAIC=AIC-min(AIC),
-         weightAIC=Weights(AIC)) %>%
-  select(Models, everything())
+         weightAIC=Weights(AIC),
+         deltaBIC=BIC-min(BIC),
+         weightBIC=Weights(BIC)) %>%
+  select(Models, everything()) %>%
+  select(Models, K, AIC, deltaAIC, weightAIC, BIC, deltaBIC, weightBIC)
 
 datatable(df_models)
 ```
