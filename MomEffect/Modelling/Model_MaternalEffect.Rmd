@@ -14,12 +14,14 @@ output:
 knitr::opts_chunk$set(echo = TRUE, fig.width=10)
 
 if (!require(pacman)) install.packages("pacman")
-pacman::p_load(plyr, dplyr, tidyr, DT, data.table, lubridate, ggplot2, plotly, nlme, MuMIn)
+pacman::p_load(plyr, dplyr, tidyr, DT, data.table, lubridate, ggplot2, plotly, nlme, MuMIn, pbapply)
 
 #dirname(file.choose())
-setwd("/Users/neo2478/Documents/GitHub/analysis_tracking/MomEffect/Modelling")
+dir <- "/Users/neo2478/Documents/GitHub/analysis_tracking/MomEffect/Modelling"
+setwd(dir)
 
 filenames <- list.files(dir, pattern="*.csv") ## Keep in folder only the .csv files that are of interest
+filenames <- filenames[filenames!="model_coefs.csv"]
 ```
 
 ## Data Input
@@ -29,6 +31,8 @@ filenames <- list.files(dir, pattern="*.csv") ## Keep in folder only the .csv fi
 #### Fixed data
 
 ```{r load and massage data}
+model_coefs <- read.csv("model_coefs.csv", stringsAsFactors = FALSE)
+
 df <- lapply(filenames, function(x) {
  read.csv(x, stringsAsFactors = FALSE) %>%
     mutate(Min=row_number()) %>%
@@ -134,75 +138,28 @@ model_logan10 <- function(Temp, alpha, k, rho, dt, tm) {
 ### Fit models to data
 
 ```{r coeficients all}
-fit_quad <- nlme(Speed~model_quad(Temp, a, b, c),
-                 data = df,
-                 fixed = list(a~1,b~1,c~1),
-                 random = list(Mother=pdDiag(list(a~1,b~1,c~1))),
-                 start = c(a=-0.069, b=0.42, c=-5.07))
+models <- lapply(1:NROW(model_coefs), function(x){
+  coefs <- model_coefs[x, c("a" , "alpha", "b", "c", "d", "dt", "k", "psi", "rho", "tm")] %>% .[, !is.na(.)]
+  
+  fit <- nlme(as.formula(model_coefs[x, "formula"]),
+              data = df %>% filter(Condition %in% model_coefs[x, "Condition"]),
+              fixed = as.formula(model_coefs[x, "fixed"]),
+              random = list(Mother=pdDiag(as.formula(model_coefs[x, "fixed"]))),
+              start = as.numeric(coefs))
+  
+  return(fit)
+})
 
-fit_gauss <- nlme(Speed~model_gauss(Temp, a, b, c),
-                  data = df,
-                  fixed = list(a~1,b~1,c~1),
-                  random = list(Mother=pdDiag(list(a~1,b~1,c~1))),
-                  start = c(0.9,35.2,5.82))   
+names(models) <- model_coefs %>% select(Model, Condition) %>% unite("name", c("Model", "Condition")) %>% .$name
 
-fit_skewedgauss <- nlme(Speed~model_skewedgauss(Temp, a, b, c, d),
-                        data = df,
-                        fixed = list(a~1,b~1,c~1,d~1),
-                        random = list(Mother=pdDiag(list(a~1,b~1,c~1,d~1))),
-                        start = c(a=0.9, b=35.2, c=5.82, d=1),
-                        control=list(msVerbose = FALSE,
-                                     pnlsTol=10))   
-
-fit_modgauss <- nlme(Speed~model_modgauss(Temp, a, b, c, d),
-                     data = df,
-                     fixed = list(a~1,b~1,c~1,d~1),
-                     random = list(Mother=pdDiag(list(a~1,b~1,c~1,d~1))),
-                     start = c(a=0.9, b=35.7, c=5.78, d=1.50),
-                     control=list(msVerbose = FALSE,
-                                  pnlsTol=10))
-
-fit_expgauss <- nlme(Speed~model_expgauss(Temp, a, b, c, d),
-                     data = df,
-                     fixed = a + b + c + d ~ 1,
-                     random = list(Mother=pdDiag(list(a~1,b~1,c~1,d~1))),
-                     start = c(a=0.0000002, b=20, c=2, d=20),
-                     control=list(msVerbose = FALSE,
-                               pnlsTol=10))
-
-fit_logan6 <- nlme(Speed~model_logan6(Temp, psi, rho, dt, tm),
-                  data = df,
-                  fixed = psi + rho + dt + tm ~ 1,
-                  random = list(Mother=pdDiag(list(psi~1,rho~1,dt~1,tm~1))),
-                  start = c(rho=0.09, psi=0.072, dt=5.3, tm=44),
-                  control=list(msVerbose = FALSE,
-                               pnlsTol=10))
-
-fit_logan10 <- nlme(Speed~model_logan10(Temp, alpha, k, rho, dt, tm),
-                    data = df,
-                    fixed = alpha + k + rho + dt + tm ~ 1,
-                    random = list(Mother=pdDiag(list(alpha~1,k~1,rho~1,dt~1,tm~1))),
-                    start = c(alpha=3.268, k=345, rho=0.174, dt=7.31, tm=43.74),
-                    control=list(msVerbose = FALSE,
-                               pnlsTol=10))
-
-# Creates coefficient table for models
-coefs <- data.frame(Quad=coef(fit_quad),
-                    Gauss=coef(fit_gauss),                 
-                    SkewedGauss=coef(fit_skewedgauss),
-                    ModGauss=coef(fit_modgauss),
-                    ExpGauss=coef(fit_expgauss),
-                    Logan6=coef(fit_logan6),
-                    Logan10=coef(fit_logan10)) %>%
-  t() %>%
-  as.data.frame() %>%
-  mutate(Row=row.names(.)) %>%
-  separate(Row, c("Model", "Coef"), "[.]") %>%
-  gather(Mother, Val, -c(Model, Coef)) %>%
-  group_by(Model, Coef) %>%
-  summarise(Val=mean(Val)) %>%
-  ungroup() %>%
-  spread(Coef, Val)
+coefs <- lapply(1:NROW(models), function(x){
+  coef(models[[x]]) %>% mutate(Model=names(models)[x])
+  }) %>%
+  do.call("bind_rows", .) %>%
+  separate(Model, c("Model", "Condition"), "_") %>%
+  group_by(Model, Condition) %>%
+  summarize_all(funs(mean(., na.rm = TRUE))) %>%
+  ungroup()
 
 datatable(coefs)
 ```
