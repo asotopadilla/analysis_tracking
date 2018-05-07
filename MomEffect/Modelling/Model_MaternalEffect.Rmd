@@ -133,6 +133,25 @@ model_logan10 <- function(Temp, alpha, k, rho, dt, tm) {
   s <- alpha*(((1 + k*exp(-rho*Temp))^(-1)) - exp(-tau))
   return(s)
 }
+
+#Model Picker for plotting
+plot_model <- function(model, Temp, a, alpha, b, c, d, dt, k, psi, rho, tm){
+  if (model=="Quad"){
+    model_quad(Temp, a, b, c)
+  } else if (model=="Gauss") {
+    model_gauss(Temp, a, b, c)
+  } else if (model=="SkewedGauss") {
+    model_skewedgauss(Temp, a, b, c, d)
+  } else if (model=="ModGauss") {
+    model_modgauss(Temp, a, b, c, d)
+  } else if (model=="ExpGauss") {
+    model_expgauss(Temp, a, b, c, d)
+  } else if (model=="Logan6") {
+    model_logan6(Temp, psi, rho, dt, tm)
+  } else if (model=="Logan10") {
+    model_logan10(Temp, alpha, k, rho, dt, tm)
+  }
+}
 ```
 
 ### Fit models to data
@@ -156,36 +175,38 @@ coefs <- lapply(1:NROW(models), function(x){
   coef(models[[x]]) %>% mutate(Model=names(models)[x])
   }) %>%
   do.call("bind_rows", .) %>%
-  separate(Model, c("Model", "Condition"), "_") %>%
-  group_by(Model, Condition) %>%
+  group_by(Model) %>%
   summarize_all(funs(mean(., na.rm = TRUE))) %>%
   ungroup()
 
 datatable(coefs)
 ```
 
-
 ### Plot models from all data over graph of mean data
 
 ```{r model plot all, warning=FALSE}
-df_plot <- df %>%
-  mutate(Quad = model_quad(Temp, a=coefs$a[1], b=coefs$b[1], c=coefs$c[1]),
-         Gauss = model_gauss(Temp, a=coefs$a[2], b=coefs$b[2], c=coefs$c[2]),
-         SkewedGauss = model_skewedgauss(Temp, a=coefs$a[3], b=coefs$b[3], c=coefs$c[3], d=coefs$d[3]),
-         ModGauss = model_modgauss(Temp, a=coefs$a[4], b=coefs$b[4], c=coefs$c[4], d=coefs$d[4]),
-         ExpGauss = model_expgauss(Temp, a=coefs$a[5], b=coefs$b[5], c=coefs$c[5], d=coefs$d[5]),
-         Logan10 = model_logan10(Temp, alpha=coefs$alpha[6], k=coefs$k[6], rho=coefs$rho[6], dt=coefs$dt[6], tm=coefs$tm[6]),
-         Logan6 = model_logan6(Temp, psi=coefs$psi[7], rho=coefs$rho[7], dt=coefs$dt[7], tm=coefs$tm[7])) %>%
-  gather(Model, Value, c(Quad, Gauss, SkewedGauss, ModGauss, ExpGauss, Logan10, Logan6))
+df_plot <- lapply(1:NROW(coefs), function(x){
+  coef <- coefs[x,] %>%
+    separate("Model", c("Model_filter", "Condition"), "_", remove = FALSE) %>%
+    select(-Condition)
+  
+  df_fit <- df %>% 
+    mutate(Model=coef$Model,
+           Fit=plot_model(model=coef$Model_filter, Temp=df$Temp, a=coef$a, alpha=coef$alpha, b=coef$b, c=coef$c,
+                          d=coef$d, dt=coef$dt, k=coef$k, psi=coef$psi, rho=coef$rho, tm=coef$tm))
+  
+  return(df_fit)
+}) %>%
+  do.call("bind_rows", .)
 
 ggplot(df_plot, aes(x=as.factor(Min), y=Speed)) +
   geom_line() +
   geom_point(size=1, shape=22, fill="white") +
-  geom_line(aes(y=Value, color=Model, group=Model)) +
+  geom_line(aes(y=Fit, color=Model, group=Model)) +
   scale_x_discrete(breaks=df$Min, labels=df$Temp) +
   scale_y_continuous(limits = c(0, NA)) +
   xlab("Temperature (C)") +
-  facet_wrap(~Model, ncol = 2.7, scales = "free") +
+  facet_wrap(~Model, ncol = 4, scales = "free") +
   theme_classic() +
   theme(legend.position="none",
         axis.text.x = element_text(angle = 90, hjust = 1))
@@ -194,27 +215,18 @@ ggplot(df_plot, aes(x=as.factor(Min), y=Speed)) +
 ### Models summary
 
 ```{r model sumary all}
-df_models <- data.frame(K=rowSums(!is.na(coefs)), stringsAsFactors = FALSE) %>%
-  cbind(., data.frame(Models=c("Quad", "Gauss", "SkewedGauss", "ModGauss", "ExpGauss", "Logan10", "Logan6")),
-                      AIC=c(AIC(fit_quad),
-                            AIC(fit_gauss),
-                            AIC(fit_skewedgauss),
-                            AIC(fit_modgauss),
-                            AIC(fit_expgauss),
-                            AIC(fit_logan10),
-                            AIC(fit_logan6)),
-                      BIC=c(BIC(fit_quad),
-                            BIC(fit_gauss),
-                            BIC(fit_skewedgauss),
-                            BIC(fit_modgauss),
-                            BIC(fit_expgauss),
-                            BIC(fit_logan10),
-                            BIC(fit_logan6))) %>%
+df_models <- lapply(1:NROW(models), function(x){
+  data.frame(Models=names(models)[x],
+             K=rowSums(!is.na(coefs[x, -1])),
+             AIC=AIC(models[[x]]),
+             BIC=BIC(models[[x]]),
+             stringsAsFactors = FALSE)
+  }) %>%
+  do.call("bind_rows", .) %>%
   mutate(deltaAIC=AIC-min(AIC),
          weightAIC=Weights(AIC),
          deltaBIC=BIC-min(BIC),
          weightBIC=Weights(BIC)) %>%
-  select(Models, everything()) %>%
   select(Models, K, AIC, deltaAIC, weightAIC, BIC, deltaBIC, weightBIC)
 
 datatable(df_models)
