@@ -16,7 +16,7 @@ pacman::p_load(plyr, dplyr, tidyr, DT, data.table, lubridate, ggplot2, flexdashb
 #update knitter with the line bellow
 #install.packages('knitr', repos = c('http://rforge.net', 'http://cran.rstudio.org'), type = 'source')
 
-wd <- "/Users/neo2478/Documents/GitHub/analysis_tracking/MomEffect/Modelling"  ##Change accordingly
+wd <- "/Users/lilmonk/Documents/GitHub/analysis_tracking/MomEffect/Modelling/"  ##Change accordingly
 
 setwd(wd)
 
