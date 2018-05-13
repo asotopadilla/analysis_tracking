@@ -147,12 +147,12 @@ write.table(df_out, "results/time_experiment_analysis_combined.csv", row.names =
 
 # Save one file per variable with videos as columns
 for (i in 1:(NCOL(df_out)-5)) {
-  df <- df_out[, c(1:5, i+5)] %>%
+  df_sep <- df_out[, c(1:5, i+5)] %>%
     spread(video, names(df_out)[i+5])
     
-    write.table(df, paste0("results/time_experiment_analysis_", names(df_out)[i+5], ".csv"), row.names = FALSE, sep=",")
+    write.table(df_sep, paste0("results/time_experiment_analysis_", names(df_out)[i+5], ".csv"), row.names = FALSE, sep=",")
     
-    rm(df, i)
+    rm(df_sep, i)
 }
 
 
