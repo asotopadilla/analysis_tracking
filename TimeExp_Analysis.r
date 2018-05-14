@@ -119,7 +119,7 @@ df <- do.call(rbind, df) %>%
 ## Run up to here and check variable df for a per phase, per location summary
 
 df_out <- df %>%
-  group_by(video, phase, phase_type, pole, safe_location) %>%
+  group_by(video, phase) %>%
   mutate(time_in_pole_initial=ifelse(step_num==1 & fly_location=="pole", num_frames, NA),
          time_in_safe_initial=ifelse(step_num>1 & location_num==1 & fly_location=="safe", num_frames, NA),
          time_in_safe_total=ifelse(fly_location=="safe", num_frames, NA),
@@ -129,8 +129,15 @@ df_out <- df %>%
          time_outside_safe_after_reaching=ifelse(reach_safe>0 & fly_location!="safe" & step_num>reach_safe, num_frames, NA),
          time_to_safe=ifelse(reach_safe>0 & fly_location!="safe" & step_num<reach_safe, num_frames, NA),
          start_in_pole=ifelse(step_num==1 & fly_location=="pole", 1, 0),
-         first_to_safe=ifelse(step_num==2 & fly_location=="safe", 1, 0)) %>%
+         first_to_safe=ifelse(step_num==2 & fly_location=="safe", 1, 0),
+         safe_location=case_when(pole=="M" ~ as.character(NA),
+                                 pole=="L" & safe_location=="L" ~ "short",
+                                 pole=="L" & safe_location=="R" ~ "long",
+                                 pole=="R" & safe_location=="L" ~ "long",
+                                 pole=="R" & safe_location=="R" ~ "short",
+                                 TRUE ~ as.character(NA))) %>%
   select(-c(fly_location, step_num, location_num, num_frames, total_frames, reach_safe)) %>%
+  group_by(video, phase, phase_type, pole, safe_location) %>%
   summarise_all(funs(sum(., na.rm=TRUE))) %>%
   mutate(first_to_safe=ifelse(pole!="M", NA, first_to_safe)) %>%
   ungroup() %>%
@@ -147,7 +154,7 @@ write.table(df_out, "results/time_experiment_analysis_combined.csv", row.names =
 
 # Save one file per variable with videos as columns
 for (i in 1:(NCOL(df_out)-5)) {
-  df_sep <- df_out[, c(1:5, i+5)] %>%
+  df_sep <- df_out[, c(1, 2, 3, 5, i+5)] %>%
     spread(video, names(df_out)[i+5])
     
     write.table(df_sep, paste0("results/time_experiment_analysis_", names(df_out)[i+5], ".csv"), row.names = FALSE, sep=",")
