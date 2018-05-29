@@ -186,19 +186,27 @@ df_out <- df %>%
   mutate_at(vars(contains("time")), funs(round(./fps, 2))) %>%
   rename(pole_location=pole)
 
+# Save file with list of videos with dead flies
+df_dead <- df_out %>%
+  filter(dead_fly==1) %>%
+  select(video) %>%
+  unique()
+
+write.table(df_dead, "results/dead_fly_videos.csv", row.names = FALSE, sep=",")
+
 # If only_trials is true, remove pole phases from data
 if (only_trials){
   df_out <- filter(df_out, phase_type=="trial")
   }
 
-#if remove_not_in_pole is TRUE, set results for flies that don't start in pole to NA
+# If remove_not_in_pole is TRUE, set results for flies that don't start in pole to NA
 if (remove_not_in_pole==TRUE){
   df_out <- df_out %>%
     mutate_at(vars(time_in_safe_initial, time_in_safe_total, time_outside_safe_after_reaching, time_to_safe, first_to_safe),
               funs(ifelse(phase_type=="trial" & start_position=="pole", ., NA)))
 }
 
-#if remove_dead is TRUE, set results for flies that don't start in pole to NA
+# If remove_dead is TRUE, set results for flies that don't start in pole to NA
 if (remove_not_in_pole==TRUE){
   df_out <- df_out %>%
     mutate_at(vars(start_position, time_in_pole_initial, time_in_safe_initial, time_in_safe_total,
@@ -212,7 +220,7 @@ write.table(df_out, "results/time_experiment_analysis_combined.csv", row.names =
 # Save one file per variable with videos as columns
 safe_locs <- unique(df_out$safe_location)
 for (i in seq_along(safe_locs)) {
-  for (j in 1:(NCOL(df_out)-5)) {
+  for (j in 1:(NCOL(df_out)-6)) {
     df_sep <- df_out %>%
       filter(safe_location==safe_locs[i]) %>%
       select(1, 2, 3, j+5) %>%
