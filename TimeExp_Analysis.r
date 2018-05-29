@@ -161,12 +161,14 @@ df_out <- df %>%
          time_to_safe=ifelse(reach_safe>0 & fly_location!="safe" & step_num<reach_safe, num_frames, NA),
          start_in_pole=ifelse(step_num==1 & fly_location=="pole", 1, 0),
          first_to_safe=ifelse(step_num==2 & fly_location=="safe", 1, 0),
-         safe_location=case_when(pole=="M" ~ "middle",
+         safe_location=case_when(pole=="M" & safe_location=="L" ~ "left",
+                                 pole=="M" & safe_location=="R" ~ "right",
                                  pole=="L" & safe_location=="L" ~ "short",
                                  pole=="L" & safe_location=="R" ~ "long",
                                  pole=="R" & safe_location=="L" ~ "long",
                                  pole=="R" & safe_location=="R" ~ "short",
-                                 TRUE ~ as.character(NA))) %>%
+                                 safe_location=="P" ~ "pole",
+                                 TRUE ~ safe_location)) %>%
   select(-c(fly_location, step_num, location_num, num_frames, total_frames, reach_safe)) %>%
   group_by(video, phase, phase_type, pole, safe_location, start_position) %>%
   summarise_all(funs(sum(., na.rm=TRUE))) %>%
@@ -214,11 +216,15 @@ if (remove_not_in_pole==TRUE){
               funs(ifelse(dead_fly==1, NA, .)))
 }
   
-# Save combines videos and variables output
+# Save combined videos and variables output
 write.table(df_out, "results/time_experiment_analysis_combined.csv", row.names = FALSE, sep=",")
 
 # Save one file per variable with videos as columns
+df_out <- df_out %>%
+  mutate(safe_location=ifelse(safe_location %in% c("left", "right"), "leftright", safe_location))
+
 safe_locs <- unique(df_out$safe_location)
+
 for (i in seq_along(safe_locs)) {
   for (j in 1:(NCOL(df_out)-6)) {
     df_sep <- df_out %>%
