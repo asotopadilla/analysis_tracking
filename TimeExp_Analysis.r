@@ -145,7 +145,8 @@ df <- do.call(rbind, df) %>%
          start_position=max(start_position, na.rm = TRUE)) %>%
   ungroup() %>%
   arrange(video, phase, step_num, fly_location) %>%
-  select(video, phase, phase_type, pole, safe_location, start_position, fly_location, step_num, location_num, num_frames, total_frames, dist)
+  select(video, phase, phase_type, pole, safe_location, start_position, fly_location,
+         step_num, location_num, num_frames, total_frames, dist)
 
 ## Run up to here and check variable df for a per phase, per location summary
 
@@ -182,7 +183,11 @@ df_out <- df %>%
   group_by(video, dead_grp) %>%
   mutate(dead_time=ifelse(dead==1, n(), 0)) %>%
   group_by(video) %>%
-  mutate(dead_fly=ifelse(max(dead_time)>=num_phases_for_dead, 1, 0)) %>%
+  mutate(dead_fly=ifelse(max(dead_time)>=num_phases_for_dead, 1, 0))
+
+# Check df_out to see the dead fly variables
+
+df_out <- df_out
   select(-c(dist, dead, dead_grp, dead_time)) %>%
   ungroup() %>%
   mutate_at(vars(contains("time")), funs(round(./fps, 2))) %>%
