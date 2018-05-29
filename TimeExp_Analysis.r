@@ -3,19 +3,31 @@
 ######## Input Parameters #########
 numphases <- 60 #number of phases in experiment
 phaseduration <- 1800 #duration of phase in frames
-onlytrials <- TRUE #set to TRUE if only trial output wanted, FALSE if trials and poles output
+dead_distance <- 20 #Max number of pixels a fly moves in a phase to consider it dead
+num_phases_for_dead <- 2 #Number of phases to consider fly dead if it doesn't move
 fps <- 30 #video fps
 width_px <- 777 #arena width in pixels
 sep="," #specify file separator
 
+only_trials <- TRUE #set to TRUE if only trial output wanted, FALSE if trials and poles output
+remove_not_in_pole <- TRUE #Set to TRUE to change values for flies that don't start in pole to NA
+remove_dead <- TRUE #Set to true to change values from dead flies to NA
+
 ######## Output Variables #########
-# time_in_pole_initial - Time in pole before getting out. Only counts is start in the pole position.
-# time_in_safe_initial - Time in safe first time entered. Only counts if not starting in safe tile already.
-# time_in_safe_total - Total time in safe tile.
-# time_outside_safe_after_reaching - Time outside safe tile after reaching it.
-# time_to_safe - Time before entering the safe tile for the first time. Only counts if not starting in safe tile already.
+# video - Video name
+# phase - Phase number
+# phase_type - Indicates whether phase is a Pole or Trial
+# pole_location - Which tile is the pole
+# safe_location - Location of the safe tile in the current phase
+# start_position - Which tile does fly start phase in
+# time_in_pole_initial - Time in pole before getting out. Only counts is start in the pole position
+# time_in_safe_initial - Time in safe first time entered. Only counts if not starting in safe tile already
+# time_in_safe_total - Total time in safe tile
+# time_outside_safe_after_reaching - Time outside safe tile after reaching it
+# time_to_safe - Time before entering the safe tile for the first time. Only counts if not starting in safe tile already
 # start_in_pole - Fly starte in pole position (1) or not (0)
-# first_to_safe - First tile fly went to is safe (1) or not (0). Only counts when pole is middle tile.
+# first_to_safe - First tile fly went to is safe (1) or not (0). Only counts when pole is middle tile
+# dead_fly - (1) if fly died in the experiment or (0) otherwise
 ###################################
 
 # Load required packages
@@ -40,6 +52,22 @@ led_extend <- function(led, phaseduration){
     }
   }
   return(led_extended)
+}
+
+#Cartesian distance function
+cart_dist <- function(x1, x2, y1, y2){
+  sqrt((x2-x1)^2 + (y2-y1)^2)
+}
+
+seq_grp <- function(x){
+  grp<-rle(x) %>%
+    do.call("cbind", .) %>%
+    as.data.frame() %>%
+    mutate(values2=cumsum(values),
+           values=ifelse(values!=0, values2, 0)) %>%
+    select(-values2)
+  
+  return(rep(grp$values, grp$lengths))
 }
 
 # Find where files to be analyzed live
@@ -104,17 +132,20 @@ df <- do.call(rbind, df) %>%
   group_by(video, phase) %>%
   mutate(step_num=ifelse(fly_location!=lag(fly_location), 1, 0),
          step_num=ifelse(row_number()==1, 1, step_num),
-         step_num=cumsum(step_num)) %>%
+         step_num=cumsum(step_num),
+         dist=cart_dist(x, lag(x), y, lag(y))) %>%
   group_by(video, phase, phase_type, pole, safe_location, fly_location, step_num) %>%
-  summarise(num_frames=n()) %>%
+  summarise(num_frames=n(), dist=sum(dist, na.rm = TRUE)) %>%
   group_by(video, phase, fly_location) %>%
   arrange(video, phase, fly_location, step_num) %>%
   mutate(location_num=row_number()) %>%
   group_by(video, phase) %>%
-  mutate(total_frames=sum(num_frames)) %>%
+  mutate(total_frames=sum(num_frames),
+         start_position=ifelse(step_num==1, fly_location, NA),
+         start_position=max(start_position, na.rm = TRUE)) %>%
   ungroup() %>%
   arrange(video, phase, step_num, fly_location) %>%
-  select(video, phase, phase_type, pole, safe_location, fly_location, step_num, location_num, num_frames, total_frames)
+  select(video, phase, phase_type, pole, safe_location, start_position, fly_location, step_num, location_num, num_frames, total_frames, dist)
 
 ## Run up to here and check variable df for a per phase, per location summary
 
@@ -137,18 +168,44 @@ df_out <- df %>%
                                  pole=="R" & safe_location=="R" ~ "short",
                                  TRUE ~ as.character(NA))) %>%
   select(-c(fly_location, step_num, location_num, num_frames, total_frames, reach_safe)) %>%
-  group_by(video, phase, phase_type, pole, safe_location) %>%
+  group_by(video, phase, phase_type, pole, safe_location, start_position) %>%
   summarise_all(funs(sum(., na.rm=TRUE))) %>%
   mutate(first_to_safe=ifelse(pole!="M", NA, first_to_safe)) %>%
+  mutate_at(vars(time_to_safe, time_outside_safe_after_reaching),
+            funs(ifelse(time_in_safe_total==0, NA, .))) %>%
+  group_by(video) %>%
+  arrange(video, phase) %>%
+  mutate(dead=ifelse(dist<=dead_distance & lag(dist)<=dead_distance, 1, 0),
+         dead_grp=seq_grp(dead)) %>%
+  group_by(video, dead_grp) %>%
+  mutate(dead_time=ifelse(dead==1, n(), 0)) %>%
+  group_by(video) %>%
+  mutate(dead_fly=ifelse(max(dead_time)>=num_phases_for_dead, 1, 0)) %>%
+  select(-c(dist, dead, dead_grp, dead_time)) %>%
   ungroup() %>%
   mutate_at(vars(contains("time")), funs(round(./fps, 2))) %>%
   rename(pole_location=pole)
 
-# If onlytrials is true, remove pole phases from data
-if (onlytrials){
+# If only_trials is true, remove pole phases from data
+if (only_trials){
   df_out <- filter(df_out, phase_type=="trial")
   }
 
+#if remove_not_in_pole is TRUE, set results for flies that don't start in pole to NA
+if (remove_not_in_pole==TRUE){
+  df_out <- df_out %>%
+    mutate_at(vars(time_in_safe_initial, time_in_safe_total, time_outside_safe_after_reaching, time_to_safe, first_to_safe),
+              funs(ifelse(phase_type=="trial" & start_position=="pole", ., NA)))
+}
+
+#if remove_dead is TRUE, set results for flies that don't start in pole to NA
+if (remove_not_in_pole==TRUE){
+  df_out <- df_out %>%
+    mutate_at(vars(start_position, time_in_pole_initial, time_in_safe_initial, time_in_safe_total,
+                   time_outside_safe_after_reaching, time_to_safe, start_in_pole, first_to_safe),
+              funs(ifelse(dead_fly==1, NA, .)))
+}
+  
 # Save combines videos and variables output
 write.table(df_out, "results/time_experiment_analysis_combined.csv", row.names = FALSE, sep=",")
 
