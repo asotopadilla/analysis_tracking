@@ -161,7 +161,7 @@ df_out <- df %>%
          time_to_safe=ifelse(reach_safe>0 & fly_location!="safe" & step_num<reach_safe, num_frames, NA),
          start_in_pole=ifelse(step_num==1 & fly_location=="pole", 1, 0),
          first_to_safe=ifelse(step_num==2 & fly_location=="safe", 1, 0),
-         safe_location=case_when(pole=="M" ~ as.character(NA),
+         safe_location=case_when(pole=="M" ~ "middle",
                                  pole=="L" & safe_location=="L" ~ "short",
                                  pole=="L" & safe_location=="R" ~ "long",
                                  pole=="R" & safe_location=="L" ~ "long",
@@ -210,13 +210,18 @@ if (remove_not_in_pole==TRUE){
 write.table(df_out, "results/time_experiment_analysis_combined.csv", row.names = FALSE, sep=",")
 
 # Save one file per variable with videos as columns
-for (i in 1:(NCOL(df_out)-5)) {
-  df_sep <- df_out[, c(1, 2, 3, 5, i+5)] %>%
-    spread(video, names(df_out)[i+5])
+safe_locs <- unique(df_out$safe_location)
+for (i in seq_along(safe_locs)) {
+  for (j in 1:(NCOL(df_out)-5)) {
+    df_sep <- df_out %>%
+      filter(safe_location==safe_locs[i]) %>%
+      select(1, 2, 3, j+5) %>%
+      spread(video, names(df_out)[j+5])
     
-    write.table(df_sep, paste0("results/time_experiment_analysis_", names(df_out)[i+5], ".csv"), row.names = FALSE, sep=",")
+    write.table(df_sep, paste0("results/", safe_locs[i], "_time_experiment_analysis_", names(df_out)[j+5], ".csv"), row.names = FALSE, sep=",")
     
-    rm(df_sep, i)
+    rm(df_sep, j)
+  }
 }
 
 
