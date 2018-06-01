@@ -187,7 +187,7 @@ df_out <- df %>%
 
 # Check df_out to see the dead fly variables
 
-df_out <- df_out
+df_out <- df_out %>%
   select(-c(dist, dead, dead_grp, dead_time)) %>%
   ungroup() %>%
   mutate_at(vars(contains("time")), funs(round(./fps, 2))) %>%
