@@ -3,7 +3,7 @@
 ######## Input Parameters #########
 numphases <- 60 #number of phases in experiment
 phaseduration <- 1800 #duration of phase in frames
-minphaseduration <- 0.95*phaseduration #Fix phases with length lower than % of phase duration. This fixed problems with phases where LED will register as off for a few frames
+minphaseduration <- 1780 #Fix phases with length lower than this number of frames. This fixed problems with phases where LED will register as off for a few frames
 dead_distance <- 20 #Max number of pixels a fly moves in a phase to consider it dead
 num_phases_for_dead <- 2 #Number of phases to consider fly dead if it doesn't move
 fps <- 30 #video fps
@@ -129,7 +129,9 @@ df <- df %>%
   filter(phase<=numphases) %>%
   group_by(video, phase) %>%
   mutate(rm_phase=ifelse(phase==1 | phase>numphases | (phase==numphases & row_number()>=phaseduration), 1, 0),
-         rm_frame=ifelse(row_number()<(n()-phaseduration) | (phase==numphases & row_number()>=phaseduration), 1, 0)) %>%
+         rm_frame=ifelse(row_number()<(n()-phaseduration) | (phase==numphases & row_number()>=phaseduration), 1, 0),
+         led_1_status=ifelse(max(led_1_status==1), 1, 0),
+         led_2_status=ifelse(max(led_2_status==1), 1, 0)) %>%
   filter(!(rm_phase==1 & rm_frame==1)) %>%
   select(-rm_phase, -rm_frame, -led) %>%
   ungroup() %>%
@@ -270,13 +272,4 @@ for (i in seq_along(safe_locs)) {
     rm(df_sep, j)
   }
 }
-
-
-
-
-
-
-
-
-
 
