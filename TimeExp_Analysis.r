@@ -3,6 +3,7 @@
 ######## Input Parameters #########
 numphases <- 60 #number of phases in experiment
 phaseduration <- 1800 #duration of phase in frames
+minphaseduration <- 0.95*phaseduration #Fix phases with length lower than % of phase duration. This fixed problems with phases where LED will register as off for a few frames
 dead_distance <- 20 #Max number of pixels a fly moves in a phase to consider it dead
 num_phases_for_dead <- 2 #Number of phases to consider fly dead if it doesn't move
 fps <- 30 #video fps
@@ -32,7 +33,7 @@ remove_dead <- TRUE #Set to true to change values from dead flies to NA
 
 # Load required packages
 if (!require(pacman)) install.packages(pacman)
-pacman::p_load(tidyverse)
+pacman::p_load(tidyverse, zoo)
 
 # Function to take blink leds and transform them to constant leds
 led_extend <- function(led, phaseduration){
@@ -99,11 +100,36 @@ df <- do.call(rbind, df) %>%
   mutate(phase=ifelse(led_1_status!=lag(led_1_status) | led_2_status!=lag(led_2_status), 1, 0),
          phase=ifelse(row_number()==1, 1, phase),
          phase=cumsum(phase),
-         phase_type=ifelse(led_1_status==0 & led_2_status==0, "pole", "trial")) %>%
+         phase_type=ifelse(led_1_status==0 & led_2_status==0, "pole", "trial"))
+
+phase_fix <- df %>%
+  group_by(video, phase_type, phase) %>%
+  summarise(n=n()) %>%
+  arrange(video, phase) %>%
+  group_by(video) %>%
+  mutate(phase_fix=ifelse(n<=minphaseduration & (lag(n)<=minphaseduration | lead(n)<=minphaseduration), 1, 0),
+         phase_num=seq_grp(phase_fix)) %>%
+  group_by(video, phase_num) %>%
+  mutate(phase_new=ifelse(phase_fix==0, phase, min(phase))) %>%
+  group_by(video, phase_new) %>%
+  cbind(., phase_fixed=group_indices(.)) %>%
+  group_by(video) %>%
+  mutate(phase_fixed=phase_fixed-min(phase_fixed)+1) %>%
+  group_by(video, phase_fixed) %>%
+  mutate(phase_type=ifelse(phase==phase_new | is.na(phase_new), phase_type, NA),
+         phase_type=na.locf(phase_type)) %>%
+  ungroup() %>%
+  select(video, phase, phase_type, phase_fixed)
+
+df <- df %>%
+  select(-phase_type) %>%
+  left_join(., phase_fix, by=c("video", "phase")) %>%
+  select(-phase) %>%
+  rename(phase=phase_fixed) %>%
   filter(phase<=numphases) %>%
   group_by(video, phase) %>%
-  mutate(rm_phase=ifelse(phase==1 | phase>numphases, 1, 0),
-         rm_frame=ifelse(row_number()<(n()-phaseduration), 1, 0)) %>%
+  mutate(rm_phase=ifelse(phase==1 | phase>numphases | (phase==numphases & row_number()>=phaseduration), 1, 0),
+         rm_frame=ifelse(row_number()<(n()-phaseduration) | (phase==numphases & row_number()>=phaseduration), 1, 0)) %>%
   filter(!(rm_phase==1 & rm_frame==1)) %>%
   select(-rm_phase, -rm_frame, -led) %>%
   ungroup() %>%
@@ -147,6 +173,8 @@ df <- do.call(rbind, df) %>%
   arrange(video, phase, step_num, fly_location) %>%
   select(video, phase, phase_type, pole, safe_location, start_position, fly_location,
          step_num, location_num, num_frames, total_frames, dist)
+
+rm(phase_fix)
 
 ## Run up to here and check variable df for a per phase, per location summary
 
