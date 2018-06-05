@@ -7,6 +7,7 @@ minbouttime <- 90 #minimum number of frames to consider a bout
 fps <- 30 #video fps
 width_px <- 777 #arena width in pixels (767 Box1; 777 Box2)
 width_cm <- 7.5 #arena width in centimeters
+focus_tile <- NA #choose tile to look at for speed (1 - Left, 2 - Middle, 3 - Right, NA - All)
 sep="," #specify file separator
 
 # Load required packages
@@ -31,6 +32,16 @@ seq_grp <- function(x){
 
 tocms <- fps*width_cm/width_px
 tocm <- width_cm/width_px
+
+if (is.na(focus_tile)) {
+  xfilter <- c(0, width_px)
+} else if (focus_tile==1) {
+  xfilter <- c(0, width_px/3)
+} else if (focus_tile==2){
+  xfilter <- c(width_px/3, 2*width_px/3)
+} else if (focus_tile==3) {
+  xfilter <- c(2*width_px/3, width_px)
+}
 
 # Find where files to be analyzed live
 dir <- dirname(file.choose())
@@ -63,6 +74,7 @@ df <- do.call(rbind, df) %>%
   arrange(video, phase, frame_idx)
 
 df_speed <- df %>%
+  filter(x>=xfilter[1] & x<=xfilter[2]) %>%
   arrange(video, phase, frame_idx) %>%
   group_by(video) %>%
   mutate(dist=cart_dist(x, lag(x), y, lag(y)),
@@ -82,6 +94,7 @@ df_speed <- df %>%
   ungroup()
 
 df_seconds_moving <- df %>%
+  filter(x>=xfilter[1] & x<=xfilter[2]) %>%
   arrange(video, phase, frame_idx) %>%
   group_by(video) %>%
   mutate(dist=cart_dist(x, lag(x), y, lag(y)),
@@ -91,6 +104,7 @@ df_seconds_moving <- df %>%
   ungroup()
 
 df_bouts <- df %>%
+  filter(x>=xfilter[1] & x<=xfilter[2]) %>%
   arrange(video, phase, frame_idx) %>%
   group_by(video, phase) %>%
   mutate(dist=cart_dist(x, lag(x), y, lag(y)),

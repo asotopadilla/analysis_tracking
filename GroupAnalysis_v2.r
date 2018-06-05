@@ -96,6 +96,7 @@ df_filter <- df %>%
   ungroup()
 
 df_dists <- df %>%
+  filter(x>=xfilter[1] & x<=xfilter[2]) %>%
   left_join(.,
             .[c("video", "frame_idx", "phase", "fly", "x", "y")],
             by = c("video", "phase", "frame_idx")) %>%
@@ -183,6 +184,7 @@ df_speed <- df %>%
   ungroup()
 
 df_seconds_moving <- df %>%
+  filter(x>=xfilter[1] & x<=xfilter[2]) %>%
   arrange(video, fly, phase, frame_idx) %>%
   group_by(video, fly) %>%
   mutate(dist=cart_dist(x, lag(x), y, lag(y)),
@@ -204,6 +206,7 @@ df_seconds_moving <- df %>%
   ungroup()
 
 df_bouts <- df %>%
+  filter(x>=xfilter[1] & x<=xfilter[2]) %>%
   arrange(video, phase, fly, frame_idx) %>%
   group_by(video, phase, fly) %>%
   mutate(dist=cart_dist(x, lag(x), y, lag(y)),
