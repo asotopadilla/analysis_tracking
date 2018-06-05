@@ -66,6 +66,7 @@ df_speed <- df %>%
   arrange(video, phase, frame_idx) %>%
   group_by(video) %>%
   mutate(dist=cart_dist(x, lag(x), y, lag(y)),
+         dist=ifelse(filter %in% df_filter$filter | dist>=maxspeed, NA, dist),
          dist=dist*tocms) %>%
   group_by(video, phase) %>%
   summarise(speed_mean=mean(dist, na.rm=TRUE),
