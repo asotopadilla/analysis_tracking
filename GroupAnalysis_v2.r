@@ -53,7 +53,7 @@ setwd(dir)
 if (!dir.exists(file.path(dir, "results"))) dir.create(file.path(dir, "results"))
 
 # Get all .csv files in chosen directory
-files <- list.files(pattern = "*.csv")
+files <- list.files(pattern = glob2rx("*.csv"))
 
 # Bind them into one data frame with a variable indication which video it comes from
 df <- (lapply(files, function(x) read.csv(x, sep=sep, stringsAsFactors = FALSE)))
