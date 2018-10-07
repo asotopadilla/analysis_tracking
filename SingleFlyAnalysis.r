@@ -3,10 +3,12 @@
 ######## Parameters #########
 minspeed <- 5 #minimum speed in pixels/frame to count number of frames spent moving
 maxspeed <- 30 #maximum speed in pixels/frame fly can move before considering it a jump
-minbouttime <- 90 #minimum number of frames to consider a bout
+minbouttime <- 15 #minimum number of frames to consider a bout
 fps <- 30 #video fps
-width_px <- 777 #arena width in pixels (767 Box1; 777 Box2)
+width_px <- 767 #arena width in pixels (767 Box1; 777 Box2; 730 flies in dark Box 2)
 width_cm <- 7.5 #arena width in centimeters
+height_cm <- 2.5 #arena height in centimeters
+border_size <- 30 #width of border in pixels
 focus_tile <- NA #choose tile to look at for speed (1 - Left, 2 - Middle, 3 - Right, NA - All)
 sep="," #specify file separator
 
@@ -32,6 +34,7 @@ seq_grp <- function(x){
 
 tocms <- fps*width_cm/width_px
 tocm <- width_cm/width_px
+height_px <- height_cm*width_px/width_cm
 
 if (is.na(focus_tile)) {
   xfilter <- c(0, width_px)
@@ -50,7 +53,7 @@ setwd(dir)
 if (!dir.exists(file.path(dir, "reults"))) dir.create(file.path(dir, "results"))
 
 # Get all .csv files in chosen directory
-files <- list.files(pattern = "*.csv")
+files <- list.files(pattern = glob2rx("*.csv"))
 
 # Bind them into one data frame with a variable indication which video it comes from
 df <- (lapply(files, function(x) read.csv(x, sep=sep, stringsAsFactors = FALSE)))
@@ -78,7 +81,7 @@ df_speed <- df %>%
   arrange(video, phase, frame_idx) %>%
   group_by(video) %>%
   mutate(dist=cart_dist(x, lag(x), y, lag(y)),
-         dist=ifelse(filter %in% df_filter$filter | dist>=maxspeed, NA, dist),
+         dist=ifelse(dist>=maxspeed, NA, dist),
          dist=dist*tocms) %>%
   group_by(video, phase) %>%
   summarise(speed_mean=mean(dist, na.rm=TRUE),
@@ -123,10 +126,24 @@ df_bouts <- df %>%
   mutate_at(vars(mean_bout_time, min_bout_time, max_bout_time),
             funs(ifelse(is.infinite(.), NA, ./fps)))
 
-df_out <- left_join(df_seconds_moving, df_speed, by = c("video", "phase")) %>%
-  left_join(., df_bouts, df_speed, by = c("video", "phase"))
+df_borders <- df %>%
+  mutate(border = case_when(x <= border_size ~ "border_left",
+                            x >= width_px - border_size ~ "border_right",
+                            y <= border_size ~ "border_top",
+                            y >= height_px - border_size ~ "border_bottom",
+                            TRUE ~ "out")) %>%
+  filter(border != "out") %>%
+  group_by(video, phase, border) %>%
+  summarise(n=n()/fps) %>%
+  group_by(video, phase) %>%
+  mutate(border_total = sum(n)) %>%
+  spread(border, n)
 
-rm(df, df_speed, df_seconds_moving, df_bouts)
+df_out <- left_join(df_seconds_moving, df_speed, by = c("video", "phase")) %>%
+  left_join(., df_bouts, by = c("video", "phase")) %>%
+  left_join(., df_borders, by = c("video", "phase"))
+
+rm(df, df_speed, df_seconds_moving, df_bouts, df_borders)
 
 write.table(df_out, "results/singlefly_analysis_combined.csv", row.names = FALSE, sep=",")
 

@@ -1,15 +1,17 @@
 # Group dynamic analysis
 
 ######## Parameters #########
-mindist <- 20 #minimum distance in pixels to consider flie clustered
-maxdist <- 30 #maximum distance in pixels to consider flies clustered
-mintime <- 10 #minumum number of frames to consider the flies clustered
+mindist <- 25 #minimum distance in pixels to consider flie clustered
+maxdist <- 40 #maximum distance in pixels to consider flies clustered
+mintime <- 15 #minumum number of frames to consider the flies clustered
 minspeed <- 5 #minimum speed in pixels/frame to count number of frames spent moving
-maxspeed <- 30 #maximum speed in pixels/frame fly can move before considering it a jump
-minbouttime <- 30 #minimum number of frames to consider a bout
+maxspeed <- 15 #maximum speed in pixels/frame fly can move before considering it a jump
+minbouttime <- 15 #minimum number of frames to consider a bout
 fps <- 30 #video fps
-width_px <- 777 #arena width in pixels
-width_cm <- 7 #arena width in centimeters
+width_px <- 767 #arena width in pixels (777 Box 2; 730 dark Box2; 767 Box 1)
+width_cm <- 7.5 #arena width in centimeters
+height_cm <- 2.5 #arena height in centimeters
+border_size <- 30 #width of border in pixels
 focus_tile <- NA #choose tile to look at for speed (1 - Left, 2 - Middle, 3 - Right, NA - All)
 sep="," #specify file separator
 
@@ -35,6 +37,7 @@ seq_grp <- function(x){
 
 tocms <- fps*width_cm/width_px
 tocm <- width_cm/width_px
+height_px <- height_cm*width_px/width_cm
 
 if (is.na(focus_tile)) {
   xfilter <- c(0, width_px)
@@ -53,7 +56,7 @@ setwd(dir)
 if (!dir.exists(file.path(dir, "results"))) dir.create(file.path(dir, "results"))
 
 # Get all .csv files in chosen directory
-files <- list.files(pattern = "*.csv")
+files <- list.files(pattern = glob2rx("*.csv"))
 
 # Bind them into one data frame with a variable indication which video it comes from
 df <- (lapply(files, function(x) read.csv(x, sep=sep, stringsAsFactors = FALSE)))
@@ -230,21 +233,48 @@ df_bouts <- df %>%
   mutate_all(funs(ifelse(is.nan(.), NA, .))) %>%
   ungroup()
 
+df_borders <- df %>%
+  mutate(border = case_when(x <= border_size ~ "border_left",
+                            x >= width_px - border_size ~ "border_right",
+                            y <= border_size ~ "border_top",
+                            y >= height_px - border_size ~ "border_bottom",
+                            TRUE ~ "out")) %>%
+  filter(border != "out") %>%
+  group_by(video, phase, fly, border) %>%
+  summarise(n=n()/fps) %>%
+  group_by(video, phase, fly) %>%
+  mutate(border_total = sum(n)) %>%
+  spread(border, n) %>%
+  group_by(video, phase) %>%
+  select(-fly) %>%
+  summarise_all(funs(mean(., na.rm = TRUE),
+                     median(., na.rm = TRUE),
+                     min(., na.rm = TRUE), max(., na.rm = TRUE),
+                     var(., na.rm = TRUE),
+                     sd(., na.rm = TRUE),
+                     ci_mean=ci(t(.), na.rm=TRUE)[1],
+                     ci_lower=ci(t(.), na.rm=TRUE)[2],
+                     ci_upper=ci(t(.), na.rm=TRUE)[3],
+                     ci_stderror=ci(t(.), na.rm=TRUE)[4])) %>%
+  mutate_all(funs(ifelse(is.nan(.) | is.infinite(.), NA, .))) %>%
+  ungroup()
+
 df_out <- left_join(df_dists, df_speed, by = c("video", "phase")) %>%
   left_join(., df_seconds_moving, by = c("video", "phase")) %>%
-  left_join(., df_bouts, by = c("video", "phase"))
+  left_join(., df_bouts, by = c("video", "phase")) %>%
+  left_join(., df_borders, by = c("video", "phase"))
 
-rm(df, df_filter, df_dists, df_speed, df_seconds_moving, df_bouts)
+rm(df, df_filter, df_dists, df_speed, df_seconds_moving, df_bouts, df_borders)
 
-df_corr <- df_out %>%
-  select(contains("median"), contains("num")) %>%
-  mutate_all(funs(ifelse(is.na(.), 0, .))) %>%
-  cor
+# df_corr <- df_out %>%
+#   select(contains("median"), contains("num")) %>%
+#   mutate_all(funs(ifelse(is.na(.), 0, .))) %>%
+#   cor
 
 write.table(df_out, "results/group_analysis_combined.csv", row.names = FALSE, sep=",")
 
-write.table(as.data.frame(df_corr) %>% mutate(` `=row.names(.)) %>% select(` `, everything()),
-            "results/group_analysis_correlation.csv", row.names = FALSE, sep=",")
+# write.table(as.data.frame(df_corr) %>% mutate(` `=row.names(.)) %>% select(` `, everything()),
+#             "results/group_analysis_correlation.csv", row.names = FALSE, sep=",")
 
 for (i in 1:(NCOL(df_out)-2)) {
   df <- df_out[, c(1, 2, i+2)] %>%
@@ -255,13 +285,13 @@ for (i in 1:(NCOL(df_out)-2)) {
     rm(df)
 }
 
-cplot <- ggcorrplot(df_corr,
-           hc.order = TRUE, 
-           type = "lower", 
-           lab = TRUE, 
-           lab_size = 3, 
-           method="square", 
-           colors = c("tomato2", "white", "springgreen3"), 
-           ggtheme=theme_bw)
-
-ggsave("results/group_analysis_correlation.png", cplot, width = 6, height = 6)
+# cplot <- ggcorrplot(df_corr,
+#            hc.order = TRUE, 
+#            type = "lower", 
+#            lab = TRUE, 
+#            lab_size = 3, 
+#            method="square", 
+#            colors = c("tomato2", "white", "springgreen3"), 
+#            ggtheme=theme_bw)
+# 
+# ggsave("results/group_analysis_correlation.png", cplot, width = 6, height = 6)
