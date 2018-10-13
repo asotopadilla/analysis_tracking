@@ -167,9 +167,24 @@ for (i in 1:(NCOL(df_out)-2)) {
 }
 
 
+###### Graph to fine tune parameters ######
 
+col_name <- "encounters_num"
+group_names <- c("TC_Grp_3_f", "TC_Grp_3_m")
 
+df_plot <- df_out %>%
+  select(one_of(c("video", "phase", col_name))) %>%
+  filter(str_detect(video, paste(group_names, collapse = "|"))) %>%
+  mutate(fly=gsub(paste(group_names, collapse = "|"), "",  video),
+         video=stri_replace_last_fixed(video, fly, "")) %>%
+  select(-fly)
+colnames(df_plot) <- c("video", "phase", "value")
 
+ggplot(df_plot, aes(x=phase, y=value, color=video)) +
+  geom_point() +
+  geom_smooth(method = 'loess')
+
+###### end of graph ###### 
 
 
 

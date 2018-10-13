@@ -278,32 +278,33 @@ df_out <- left_join(df_dists, df_speed, by = c("video", "phase")) %>%
 
 rm(df, df_filter, df_dists, df_speed, df_seconds_moving, df_bouts, df_borders)
 
-# df_corr <- df_out %>%
-#   select(contains("median"), contains("num")) %>%
-#   mutate_all(funs(ifelse(is.na(.), 0, .))) %>%
-#   cor
-
 write.table(df_out, "results/group_analysis_combined.csv", row.names = FALSE, sep=",")
-
-# write.table(as.data.frame(df_corr) %>% mutate(` `=row.names(.)) %>% select(` `, everything()),
-#             "results/group_analysis_correlation.csv", row.names = FALSE, sep=",")
 
 for (i in 1:(NCOL(df_out)-2)) {
   df <- df_out[, c(1, 2, i+2)] %>%
     spread(video, names(df_out)[i+2])
-    
-    write.table(df, paste0("results/group_analysis_", names(df_out)[i+2], ".csv"), row.names = FALSE, sep=",")
-    
-    rm(df)
+  
+  write.table(df, paste0("results/group_analysis_", names(df_out)[i+2], ".csv"), row.names = FALSE, sep=",")
+  
+  rm(df)
 }
 
-# cplot <- ggcorrplot(df_corr,
-#            hc.order = TRUE, 
-#            type = "lower", 
-#            lab = TRUE, 
-#            lab_size = 3, 
-#            method="square", 
-#            colors = c("tomato2", "white", "springgreen3"), 
-#            ggtheme=theme_bw)
-# 
-# ggsave("results/group_analysis_correlation.png", cplot, width = 6, height = 6)
+###### Graph to fine tune parameters ######
+
+col_name <- "encounters_num"
+group_names <- c("TC_Grp_3_f", "TC_Grp_3_m")
+
+df_plot <- df_out %>%
+  select(one_of(c("video", "phase", col_name))) %>%
+  filter(str_detect(video, paste(group_names, collapse = "|"))) %>%
+  mutate(fly=gsub(paste(group_names, collapse = "|"), "",  video),
+         video=stri_replace_last_fixed(video, fly, "")) %>%
+  select(-fly)
+colnames(df_plot) <- c("video", "phase", "value")
+
+ggplot(df_plot, aes(x=phase, y=value, color=video)) +
+  geom_point() +
+  geom_smooth(method = 'loess')
+
+###### end of graph ###### 
+
