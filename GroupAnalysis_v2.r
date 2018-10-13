@@ -164,7 +164,9 @@ df_dists <- df %>%
             longest_dist_ci_stderror=ci(t(max_dist), na.rm=TRUE)[4]
             ) %>%
   ungroup() %>%
-  mutate_at(vars(-video), funs(ifelse(is.nan(.) | is.infinite(.), NA, .)))
+  mutate_at(vars(-video), funs(ifelse(is.nan(.) | is.infinite(.), NA, .))) %>%
+  mutate_at(vars(encounters_min_length, encounters_num),
+            funs(ifelse(is.na(.), 0, .)))
 
 df_speed <- df %>%
   filter(x>=xfilter[1] & x<=xfilter[2]) %>%
@@ -237,7 +239,11 @@ df_bouts <- df %>%
   group_by(video, phase) %>%
   summarise_all(funs(mean(., na.rm = TRUE))) %>%
   mutate_all(funs(ifelse(is.nan(.), NA, .))) %>%
-  ungroup()
+  ungroup() %>%
+  mutate_at(vars(mean_num_bouts,
+                 mean_mean_bout_time, mean_min_bout_time, mean_max_bout_time,
+                 mean_mean_bout_speed, mean_min_bout_speed, mean_max_bout_speed),
+            funs(ifelse(is.na(.), 0, .)))
 
 df_borders <- df %>%
   mutate(border = case_when(x <= border_size ~ "border_left",

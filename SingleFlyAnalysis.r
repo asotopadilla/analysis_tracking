@@ -123,14 +123,18 @@ df_bouts <- df %>%
             mean_bout_time=mean(bout_time, na.rm = TRUE),
             min_bout_time=min(bout_time, na.rm = TRUE),
             max_bout_time=max(bout_time, na.rm = TRUE),
-            mean_mean_bout_speed=mean(bout_speed, na.rm = TRUE),
-            mean_min_bout_speed=min(bout_speed, na.rm = TRUE),
-            mean_max_bout_speed=max(bout_speed, na.rm = TRUE)) %>%
+            mean_bout_speed=mean(bout_speed, na.rm = TRUE),
+            min_bout_speed=min(bout_speed, na.rm = TRUE),
+            max_bout_speed=max(bout_speed, na.rm = TRUE)) %>%
   ungroup() %>%
   mutate_at(vars(mean_bout_time, min_bout_time, max_bout_time),
             funs(ifelse(is.infinite(.), NA, ./fps))) %>%
-  mutate_at(vars(mean_mean_bout_speed, mean_min_bout_speed, mean_max_bout_speed),
-            funs(ifelse(is.infinite(.), NA, .*tocms)))
+  mutate_at(vars(mean_bout_speed, min_bout_speed, max_bout_speed),
+            funs(ifelse(is.infinite(.), NA, .*tocms))) %>%
+  mutate_at(vars(num_bouts,
+                 mean_bout_time, min_bout_time, max_bout_time,
+                 mean_bout_speed, min_bout_speed, max_bout_speed),
+            funs(ifelse(is.na(.), 0, .)))
 
 df_borders <- df %>%
   mutate(border = case_when(x <= border_size ~ "border_left",
