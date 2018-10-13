@@ -164,7 +164,9 @@ df_dists <- df %>%
             longest_dist_ci_stderror=ci(t(max_dist), na.rm=TRUE)[4]
             ) %>%
   ungroup() %>%
-  mutate_at(vars(-video), funs(ifelse(is.nan(.) | is.infinite(.), NA, .)))
+  mutate_at(vars(-video), funs(ifelse(is.nan(.) | is.infinite(.), NA, .))) %>%
+  mutate_at(vars(encounters_min_length, encounters_num),
+            funs(ifelse(is.na(.), 0, .)))
 
 df_speed <- df %>%
   filter(x>=xfilter[1] & x<=xfilter[2]) %>%
@@ -218,20 +220,30 @@ df_bouts <- df %>%
          bout_grp=seq_grp(bout)) %>%
   group_by(video, phase, fly, bout_grp) %>%
   mutate(bout_time=ifelse(n()>=minbouttime & bout_grp!=0, n(), NA),
-         bouts=ifelse(is.na(bout_time), 0, bout_grp)) %>%
+         bouts=ifelse(is.na(bout_time), 0, bout_grp),
+         bout_speed=ifelse(is.na(bout_time), NA, dist)) %>%
   group_by(video, phase, fly) %>%
   summarise(mean_num_bouts=NROW(unique(bouts))-1,
             mean_mean_bout_time=mean(bout_time, na.rm = TRUE),
             mean_min_bout_time=min(bout_time, na.rm = TRUE),
-            mean_max_bout_time=max(bout_time, na.rm = TRUE)) %>%
+            mean_max_bout_time=max(bout_time, na.rm = TRUE),
+            mean_mean_bout_speed=mean(bout_speed, na.rm = TRUE),
+            mean_min_bout_speed=min(bout_speed, na.rm = TRUE),
+            mean_max_bout_speed=max(bout_speed, na.rm = TRUE)) %>%
   ungroup() %>%
   mutate_at(vars(mean_mean_bout_time, mean_min_bout_time, mean_max_bout_time),
             funs(ifelse(is.infinite(.), NA, ./fps))) %>%
+  mutate_at(vars(mean_mean_bout_speed, mean_min_bout_speed, mean_max_bout_speed),
+            funs(ifelse(is.infinite(.), NA, .*tocms))) %>%
   select(-fly) %>%
   group_by(video, phase) %>%
   summarise_all(funs(mean(., na.rm = TRUE))) %>%
   mutate_all(funs(ifelse(is.nan(.), NA, .))) %>%
-  ungroup()
+  ungroup() %>%
+  mutate_at(vars(mean_num_bouts,
+                 mean_mean_bout_time, mean_min_bout_time, mean_max_bout_time,
+                 mean_mean_bout_speed, mean_min_bout_speed, mean_max_bout_speed),
+            funs(ifelse(is.na(.), 0, .)))
 
 df_borders <- df %>%
   mutate(border = case_when(x <= border_size ~ "border_left",

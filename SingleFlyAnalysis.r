@@ -116,15 +116,25 @@ df_bouts <- df %>%
          bout_grp=seq_grp(bout)) %>%
   group_by(video, phase, bout_grp) %>%
   mutate(bout_time=ifelse(n()>=minbouttime & bout_grp!=0, n(), NA),
-         bouts=ifelse(is.na(bout_time), 0, bout_grp)) %>%
+         bouts=ifelse(is.na(bout_time), 0, bout_grp),
+         bout_speed=ifelse(is.na(bout_time), NA, dist)) %>%
   group_by(video, phase) %>%
   summarise(num_bouts=NROW(unique(bouts))-1,
             mean_bout_time=mean(bout_time, na.rm = TRUE),
             min_bout_time=min(bout_time, na.rm = TRUE),
-            max_bout_time=max(bout_time, na.rm = TRUE)) %>%
+            max_bout_time=max(bout_time, na.rm = TRUE),
+            mean_bout_speed=mean(bout_speed, na.rm = TRUE),
+            min_bout_speed=min(bout_speed, na.rm = TRUE),
+            max_bout_speed=max(bout_speed, na.rm = TRUE)) %>%
   ungroup() %>%
   mutate_at(vars(mean_bout_time, min_bout_time, max_bout_time),
-            funs(ifelse(is.infinite(.), NA, ./fps)))
+            funs(ifelse(is.infinite(.), NA, ./fps))) %>%
+  mutate_at(vars(mean_bout_speed, min_bout_speed, max_bout_speed),
+            funs(ifelse(is.infinite(.), NA, .*tocms))) %>%
+  mutate_at(vars(num_bouts,
+                 mean_bout_time, min_bout_time, max_bout_time,
+                 mean_bout_speed, min_bout_speed, max_bout_speed),
+            funs(ifelse(is.na(.), 0, .)))
 
 df_borders <- df %>%
   mutate(border = case_when(x <= border_size ~ "border_left",
