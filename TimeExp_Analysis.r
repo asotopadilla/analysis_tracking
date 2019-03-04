@@ -5,9 +5,11 @@ numphases <- 60 #number of phases in experiment
 phaseduration <- 1800 #duration of phase in frames
 minphaseduration <- 1780 #Fix phases with length lower than this number of frames. This fixed problems with phases where LED will register as off for a few frames
 dead_distance <- 20 #Max number of pixels a fly moves in a phase to consider it dead
+maxspeed <- 15 #maximum speed in pixels/frame fly can move before considering it a jump
 num_phases_for_dead <- 2 #Number of phases to consider fly dead if it doesn't move
 fps <- 30 #video fps
 width_px <- 777 #arena width in pixels
+width_cm <- 7.5 #arena width in centimeters
 sep="," #specify file separator
 
 only_trials <- TRUE #set to TRUE if only trial output wanted, FALSE if trials and poles output
@@ -28,6 +30,8 @@ remove_dead <- TRUE #Set to true to change values from dead flies to NA
 # time_to_safe - Time before entering the safe tile for the first time. Only counts if not starting in safe tile already
 # start_in_pole - Fly starte in pole position (1) or not (0)
 # first_to_safe - First tile fly went to is safe (1) or not (0). Only counts when pole is middle tile
+# first_to_closest - First tile fly went to is closest it was to in start of phase (1) or not (0). Only counts is start in the pole position
+# speed_to_safe - means speed to reach safe tile in cm/s
 # dead_fly - (1) if fly died in the experiment or (0) otherwise
 ###################################
 
@@ -70,6 +74,9 @@ seq_grp <- function(x){
   
   return(rep(grp$values, grp$lengths))
 }
+
+tocms <- fps*width_cm/width_px
+tocm <- width_cm/width_px
 
 # Find where files to be analyzed live
 dir <- dirname(file.choose())
@@ -156,13 +163,25 @@ df <- df %>%
                           safe_location=="P" ~ pole_r),
          fly_location=case_when(x>=pole_l & x<=pole_r ~ "pole",
                                 x>=safe_l & x<=safe_r ~ "safe",
-                                TRUE ~ "unsafe")) %>%
+                                TRUE ~ "unsafe"),
+         fly_tile=case_when(x < width_px/3 ~ "L",
+                            x > 2*width_px/3 ~ "R",
+                            TRUE ~ "M")) %>%
   group_by(video, phase) %>%
-  mutate(step_num=ifelse(fly_location!=lag(fly_location), 1, 0),
+  mutate(closest_tile=case_when(row_number()==1 & (x <= width_px/3 | x >= 2*width_px/3) ~ "M",
+                                row_number()==1 & x > width_px/3 & x < width_px/2 ~ "L",
+                                row_number()==1 & x < 2*width_px/3 & x > width_px/2 ~ "R",
+                                TRUE ~ as.character(NA)),
+         closest_tile=na.locf(closest_tile, na.rm = FALSE),
+         step_num=ifelse(fly_location!=lag(fly_location), 1, 0),
          step_num=ifelse(row_number()==1, 1, step_num),
          step_num=cumsum(step_num),
-         dist=cart_dist(x, lag(x), y, lag(y))) %>%
-  group_by(video, phase, phase_type, pole, safe_location, fly_location, step_num) %>%
+         dist=cart_dist(x, lag(x), y, lag(y)),
+         dist=ifelse(dist > maxspeed, NA, dist)) %>%
+  group_by(video, phase, phase_type, pole, safe_location, fly_location, closest_tile, step_num) %>%
+  mutate(fly_tile=ifelse(row_number()==1, fly_tile, NA),
+         fly_tile=na.locf(fly_tile, na.rm = FALSE)) %>%
+  group_by(video, phase, phase_type, pole, safe_location, fly_location, fly_tile, closest_tile, step_num) %>%
   summarise(num_frames=n(), dist=sum(dist, na.rm = TRUE)) %>%
   group_by(video, phase, fly_location) %>%
   arrange(video, phase, fly_location, step_num) %>%
@@ -173,8 +192,8 @@ df <- df %>%
          start_position=max(start_position, na.rm = TRUE)) %>%
   ungroup() %>%
   arrange(video, phase, step_num, fly_location) %>%
-  select(video, phase, phase_type, pole, safe_location, start_position, fly_location,
-         step_num, location_num, num_frames, total_frames, dist)
+  select(video, phase, phase_type, pole, safe_location, start_position, closest_tile, fly_location,
+         fly_tile, step_num, location_num, num_frames, total_frames, dist)
 
 rm(phase_fix)
 
@@ -192,6 +211,7 @@ df_out <- df %>%
          time_to_safe=ifelse(reach_safe>0 & fly_location!="safe" & step_num<reach_safe, num_frames, NA),
          start_in_pole=ifelse(step_num==1 & fly_location=="pole", 1, 0),
          first_to_safe=ifelse(step_num==2 & fly_location=="safe", 1, 0),
+         first_to_closest=ifelse(step_num==2 & fly_tile==closest_tile, 1, 0),
          safe_location=case_when(pole=="M" & safe_location=="L" ~ "left",
                                  pole=="M" & safe_location=="R" ~ "right",
                                  pole=="L" & safe_location=="L" ~ "short",
@@ -199,13 +219,15 @@ df_out <- df %>%
                                  pole=="R" & safe_location=="L" ~ "long",
                                  pole=="R" & safe_location=="R" ~ "short",
                                  safe_location=="P" ~ "pole",
-                                 TRUE ~ safe_location)) %>%
-  select(-c(fly_location, step_num, location_num, num_frames, total_frames, reach_safe)) %>%
+                                 TRUE ~ safe_location),
+         dist_to_safe=ifelse(step_num<reach_safe, dist, 0)) %>%
+  select(-c(fly_location, fly_tile, closest_tile, step_num, location_num, num_frames, total_frames, reach_safe)) %>%
   group_by(video, phase, phase_type, pole, safe_location, start_position) %>%
   summarise_all(funs(sum(., na.rm=TRUE))) %>%
   mutate(first_to_safe=ifelse(pole!="M", NA, first_to_safe)) %>%
   mutate_at(vars(time_to_safe, time_outside_safe_after_reaching),
             funs(ifelse(time_in_safe_total==0, NA, .))) %>%
+  mutate(speed_to_safe = (dist_to_safe/time_to_safe)*tocms) %>%
   group_by(video) %>%
   arrange(video, phase) %>%
   mutate(dead=ifelse(dist<=dead_distance & lag(dist)<=dead_distance, 1, 0),
@@ -218,7 +240,7 @@ df_out <- df %>%
 # Check df_out to see the dead fly variables
 
 df_out <- df_out %>%
-  select(-c(dist, dead, dead_grp, dead_time)) %>%
+  select(-c(dist, dist_to_safe, dead, dead_grp, dead_time)) %>%
   ungroup() %>%
   mutate_at(vars(contains("time")), funs(round(./fps, 2))) %>%
   rename(pole_location=pole)
@@ -239,15 +261,15 @@ if (only_trials){
 # If remove_not_in_pole is TRUE, set results for flies that don't start in pole to NA
 if (remove_not_in_pole==TRUE){
   df_out <- df_out %>%
-    mutate_at(vars(time_in_safe_initial, time_in_safe_total, time_outside_safe_after_reaching, time_to_safe, first_to_safe),
+    mutate_at(vars(time_in_safe_initial, time_in_safe_total, time_outside_safe_after_reaching, time_to_safe, first_to_safe, first_to_closest),
               funs(ifelse(phase_type=="trial" & start_position=="pole", ., NA)))
 }
 
-# If remove_dead is TRUE, set results for flies that don't start in pole to NA
+# If remove_dead is TRUE, set results for flies that are dead to NA
 if (remove_not_in_pole==TRUE){
   df_out <- df_out %>%
     mutate_at(vars(start_position, time_in_pole_initial, time_in_safe_initial, time_in_safe_total,
-                   time_outside_safe_after_reaching, time_to_safe, start_in_pole, first_to_safe),
+                   time_outside_safe_after_reaching, time_to_safe, start_in_pole, first_to_safe, first_to_closest),
               funs(ifelse(dead_fly==1, NA, .)))
 }
   
