@@ -261,15 +261,15 @@ if (only_trials){
 # If remove_not_in_pole is TRUE, set results for flies that don't start in pole to NA
 if (remove_not_in_pole==TRUE){
   df_out <- df_out %>%
-    mutate_at(vars(time_in_safe_initial, time_in_safe_total, time_outside_safe_after_reaching, time_to_safe, first_to_safe, first_to_closest),
+    mutate_at(vars(time_in_safe_initial, time_in_safe_total, time_outside_safe_after_reaching, time_to_safe, first_to_safe, first_to_closest, dist_to_safe),
               funs(ifelse(phase_type=="trial" & start_position=="pole", ., NA)))
 }
 
 # If remove_dead is TRUE, set results for flies that are dead to NA
-if (remove_not_in_pole==TRUE){
+if (remove_dead==TRUE){
   df_out <- df_out %>%
     mutate_at(vars(start_position, time_in_pole_initial, time_in_safe_initial, time_in_safe_total,
-                   time_outside_safe_after_reaching, time_to_safe, start_in_pole, first_to_safe, first_to_closest),
+                   time_outside_safe_after_reaching, time_to_safe, start_in_pole, first_to_safe, first_to_closest, dist_to_safe),
               funs(ifelse(dead_fly==1, NA, .)))
 }
   
