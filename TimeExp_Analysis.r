@@ -127,12 +127,13 @@ phase_fix <- df %>%
   mutate(phase_type=ifelse(phase==phase_new | is.na(phase_new), phase_type, NA),
          phase_type=na.locf(phase_type)) %>%
   ungroup() %>%
-  select(video, phase, phase_type, phase_fixed)
+  mutate(frame=cumsum(n)) %>%
+  select(video, phase, phase_type, phase_fixed, n, frame)
 
 df <- df %>%
   select(-phase_type) %>%
   left_join(., phase_fix, by=c("video", "phase")) %>%
-  select(-phase) %>%
+  select(-phase, -n, -frame) %>%
   rename(phase=phase_fixed) %>%
   filter(phase<=numphases) %>%
   group_by(video, phase) %>%
