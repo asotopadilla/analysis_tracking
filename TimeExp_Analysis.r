@@ -31,7 +31,8 @@ remove_dead <- TRUE #Set to true to change values from dead flies to NA
 # start_in_pole - Fly starte in pole position (1) or not (0)
 # first_to_safe - First tile fly went to is safe (1) or not (0). Only counts when pole is middle tile
 # first_to_closest - First tile fly went to is closest it was to in start of phase (1) or not (0). Only counts is start in the pole position
-# speed_to_safe - means speed to reach safe tile in cm/s
+# dist_to_safe - dist walked to reach safe tile for the first time
+# speed_to_safe - mean speed to reach safe tile in cm/s
 # dead_fly - (1) if fly died in the experiment or (0) otherwise
 ###################################
 
@@ -224,7 +225,9 @@ df_out <- df %>%
   select(-c(fly_location, fly_tile, closest_tile, step_num, location_num, num_frames, total_frames, reach_safe)) %>%
   group_by(video, phase, phase_type, pole, safe_location, start_position) %>%
   summarise_all(funs(sum(., na.rm=TRUE))) %>%
-  mutate(first_to_safe=ifelse(pole!="M", NA, first_to_safe)) %>%
+  mutate(first_to_safe = ifelse(pole!="M", NA, first_to_safe),
+         dist_to_safe = ifelse(dist_to_safe>0, dist, NA),
+         dist_to_safe = dist_to_safe*tocm) %>%
   mutate_at(vars(time_to_safe, time_outside_safe_after_reaching),
             funs(ifelse(time_in_safe_total==0, NA, .))) %>%
   mutate(speed_to_safe = (dist_to_safe/time_to_safe)*tocms) %>%
@@ -240,7 +243,7 @@ df_out <- df %>%
 # Check df_out to see the dead fly variables
 
 df_out <- df_out %>%
-  select(-c(dist, dist_to_safe, dead, dead_grp, dead_time)) %>%
+  select(-c(dist, dead, dead_grp, dead_time)) %>%
   ungroup() %>%
   mutate_at(vars(contains("time")), funs(round(./fps, 2))) %>%
   rename(pole_location=pole)
@@ -261,7 +264,7 @@ if (only_trials){
 # If remove_not_in_pole is TRUE, set results for flies that don't start in pole to NA
 if (remove_not_in_pole==TRUE){
   df_out <- df_out %>%
-    mutate_at(vars(time_in_safe_initial, time_in_safe_total, time_outside_safe_after_reaching, time_to_safe, first_to_safe, first_to_closest, dist_to_safe),
+    mutate_at(vars(time_in_safe_initial, time_in_safe_total, time_outside_safe_after_reaching, time_to_safe, first_to_safe, first_to_closest, dist_to_safe, speed_to_safe),
               funs(ifelse(phase_type=="trial" & start_position=="pole", ., NA)))
 }
 
@@ -269,7 +272,7 @@ if (remove_not_in_pole==TRUE){
 if (remove_dead==TRUE){
   df_out <- df_out %>%
     mutate_at(vars(start_position, time_in_pole_initial, time_in_safe_initial, time_in_safe_total,
-                   time_outside_safe_after_reaching, time_to_safe, start_in_pole, first_to_safe, first_to_closest, dist_to_safe),
+                   time_outside_safe_after_reaching, time_to_safe, start_in_pole, first_to_safe, first_to_closest, dist_to_safe, speed_to_safe),
               funs(ifelse(dead_fly==1, NA, .)))
 }
   
