@@ -248,6 +248,16 @@ df_out <- df_out %>%
   mutate_at(vars(contains("time")), funs(round(./fps, 2))) %>%
   rename(pole_location=pole)
 
+# Distribution of start positions
+
+df_startdists <- df_out %>%
+  group_by(phase_type, start_position) %>%
+  summarise(n=n()) %>%
+  group_by(phase_type) %>%
+  mutate(pcnt=100*(n/sum(n)))
+
+write.table(df_startdists, "results/start_distribution.csv", row.names = FALSE, sep=",")
+
 # Save file with list of videos with dead flies
 df_dead <- df_out %>%
   filter(dead_fly==1) %>%
