@@ -107,6 +107,21 @@ print("#### 5. Within genotype ####")
 aov_5 
 print("####################################################################################################")
 
+## 6. Within stimulous (one anova per genotype and phase)
+grps<-unique(df_model %>% select(phase, genotype))
+
+aov_6 <- lapply(1:NROW(grps), function(x) {
+  anova <- aov(target ~ stimulus, df_model %>% filter(phase==grps$phase[x], genotype==grps$genotype[x]))
+  posthoc <- TukeyHSD(x=anova, 'stimulus',  conf.level=0.95)
+  result <- list(tidy(anova), tidy(posthoc))
+  names(result) <- c(paste0(grps$phase[x], " ",grps$genotype[x], " Anova"), paste0(grps$phase[x], " ", grps$genotype[x], " Tukey"))
+  return(result)
+})
+print("#### 6. Within stimulous (one anova per genotype and phase) ####")
+aov_6
+print("####################################################################################################")
+
+
 # Resume printing console output to console
 sink()
 sink(type="message")
