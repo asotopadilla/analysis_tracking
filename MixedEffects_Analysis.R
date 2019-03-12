@@ -94,6 +94,19 @@ print("#### 4. Within experiment: NL_CS vs OL_CS vs TL_CS (one anova per genotyp
 aov_4
 print("####################################################################################################")
 
+## 5. Within genotype
+aov_5 <- lapply(1, function(x) {
+  anova <- aov(target ~ genotype, df_model)
+  posthoc <- TukeyHSD(x=anova, 'genotype',  conf.level=0.95)
+  result <- list(tidy(anova), tidy(posthoc))
+  names(result) <- c(paste0("Anova"), paste0("Tukey"))
+  return(result)
+})
+
+print("#### 5. Within genotype ####")
+aov_5 
+print("####################################################################################################")
+
 # Resume printing console output to console
 sink()
 sink(type="message")
