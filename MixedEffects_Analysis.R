@@ -4,6 +4,7 @@ target_variable <- "time_to_safe" #which variable do you want to analyse in the 
 sep <- ',' #specify file separator
 auditory <-c("NT", "TT", "OT")
 visual <- c("NL", "TL", "OL")
+naming <- "stimulus_id" #naming convention used for file. I.e. stimulus_genotype_id or stimulus_id
 
 
 # Load required packages
@@ -16,16 +17,21 @@ setwd(dirname(file_load))
 file_save <- paste0(basename(file_path_sans_ext(file_load)), "_anova_results.txt")
 
 # load file and clean it
+naming <- str_split(naming, "_") %>% unlist()
+
 df <- read.csv(file_load, sep=sep, stringsAsFactors = FALSE) %>%
   filter(phase_type == "trial") %>%
-  separate(video, c("stimulus", "genotype", "id"), "_", remove = FALSE, extra = "drop")
+  separate(video, naming, "_", remove = FALSE, extra = "drop")
 
 # Anovas an Tukeys
-df_model <- df [c("stimulus", "genotype", "id", "phase", target_variable)]
-names(df_model) <- c("stimulus", "genotype", "id", "phase", "target")
+df_model <- df [c(naming, "phase", target_variable)]
+names(df_model) <- c(naming, "phase", "target")
 df_model <- df_model %>%
-  mutate(group = paste0(stimulus, "_", genotype),
-         phase=as.factor(phase),
+  {if ("stimulus" %in% naming && "genotype" %in% naming) mutate(., group = paste0(stimulus, "_", genotype))
+   else if ("stimulus" %in% naming) mutate(., group = stimulus)
+   else if ("genotype" %in% naming) mutate(., group = genotype)
+   else mutate(., group = "other")}
+  mutate(phase=as.factor(phase),
          group_phase = paste0(group, "_", phase),
          experiment = case_when(stimulus %in% auditory ~ "auditory",
                                 stimulus %in% visual ~ "visual",
