@@ -1,9 +1,9 @@
 # Mixed Effects Model Analysis
 
-target_variable <- "time_to_safe" #which variable do you want to analyse in the model
+target_variable <- "time_to_start_moving" #which variable do you want to analyse in the model
 sep <- ',' #specify file separator
-auditory <-c("NT", "TT", "OT")
-visual <- c("NL", "TL", "OL")
+auditory <-c("FC", "FL", "FS")
+visual <- c("")
 naming <- "stimulus_id" #naming convention used for file. I.e. stimulus_genotype_id or stimulus_id
 
 
@@ -28,9 +28,9 @@ df_model <- df [c(naming, "phase", target_variable)]
 names(df_model) <- c(naming, "phase", "target")
 df_model <- df_model %>%
   {if ("stimulus" %in% naming && "genotype" %in% naming) mutate(., group = paste0(stimulus, "_", genotype))
-   else if ("stimulus" %in% naming) mutate(., group = stimulus)
-   else if ("genotype" %in% naming) mutate(., group = genotype)
-   else mutate(., group = "other")}
+   else if ("stimulus" %in% naming && !("genotype" %in% naming)) mutate(., group = stimulus, genotype = "gen")
+   else if (!("stimulus" %in% naming) && "genotype" %in% naming) mutate(., group = genotype, stimulus = "stim")
+   else mutate(., group = "other")} %>%
   mutate(phase=as.factor(phase),
          group_phase = paste0(group, "_", phase),
          experiment = case_when(stimulus %in% auditory ~ "auditory",
@@ -113,7 +113,7 @@ print("#### 5. Within genotype ####")
 aov_5 
 print("####################################################################################################")
 
-## 6. Within stimulous (one anova per genotype and phase)
+## 6. Within stimulus (one anova per genotype and phase)
 grps<-unique(df_model %>% select(phase, genotype))
 
 aov_6 <- lapply(1:NROW(grps), function(x) {
@@ -123,7 +123,7 @@ aov_6 <- lapply(1:NROW(grps), function(x) {
   names(result) <- c(paste0(grps$phase[x], " ",grps$genotype[x], " Anova"), paste0(grps$phase[x], " ", grps$genotype[x], " Tukey"))
   return(result)
 })
-print("#### 6. Within stimulous (one anova per genotype and phase) ####")
+print("#### 6. Within stimulus (one anova per genotype and phase) ####")
 aov_6
 print("####################################################################################################")
 
