@@ -19,9 +19,9 @@ print("#################### Survival ####################")
 
 ## Load and clean data
 df_fitness <- read.csv(file.path("fitness_data.csv"), stringsAsFactors = FALSE, na.strings = c("NA", "#VALUE!", "#DIV/0!")) %>%
-  select(Var1, F1.survival.m, F1.survival.mm, F2.survival.m, F2.survival.mm) %>%
+  select(Var1, F1.survival.m, F1.survival.mm,F2.survival.m, F2.survival.mm) %>%
   gather(condition, survival, -Var1) %>%
-  separate(condition, into = c("generation", NA, "condition")) %>%
+  separate(condition, into = c("generation", "ignore", "condition")) %>%
   mutate(mother=gsub("[^A-Za-z]", "", Var1),
          mother_id=Var1,
          offspring=case_when(mother=="C" & condition=="m"~"C",
@@ -147,7 +147,7 @@ print("#################### Tempbox ####################")
 df_tempbox <- read.csv(file.path("tempbox_data.csv"), stringsAsFactors = FALSE, na.strings = c("NA", "#VALUE!", "#DIV/0!")) %>%
   select(mother_id, Speed_m, Speed_mm, Temp_m, Temp_mm, Sex_m, Sex_mm) %>%
   gather(condition, speed, -mother_id, -Temp_m, -Temp_mm, -Sex_m, -Sex_mm) %>%
-  separate(condition, into = c(NA, "condition")) %>%
+  separate(condition, into = c("ignore", "condition")) %>%
   mutate(mother=gsub("[^A-Za-z]", "", mother_id),
          offspring=case_when(mother=="C" & condition=="m"~"C",
                              mother=="C" & condition=="mm"~"H",
