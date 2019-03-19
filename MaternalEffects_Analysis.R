@@ -19,38 +19,111 @@ print("#################### Survival ####################")
 
 ## Load and clean data
 df_fitness <- read.csv(file.path("fitness_data.csv"), stringsAsFactors = FALSE, na.strings = c("NA", "#VALUE!", "#DIV/0!")) %>%
-  select(Var1, F1.survival.m, F1.survival.mm,F2.survival.m, F2.survival.mm) %>%
-  gather(condition, survival, -Var1) %>%
-  separate(condition, into = c("generation", "ignore", "condition")) %>%
+  select(Var1, F1.survival.m, F1.survival.mm, F2.survival.m, F2.survival.mm, egg_f1_m, egg_f1_mm, egg_f2_m, egg_f2_mm) %>%
+  gather(condition, survival, -Var1, -egg_f1_m, -egg_f1_mm, -egg_f2_m, -egg_f2_mm) %>%
+  separate(condition, into = c("generation", "metric", "condition")) %>%
   mutate(mother=gsub("[^A-Za-z]", "", Var1),
          mother_id=Var1,
          offspring=case_when(mother=="C" & condition=="m"~"C",
                              mother=="C" & condition=="mm"~"H",
                              mother=="H" & condition=="m"~"H",
                              mother=="H" & condition=="mm"~"C"),
-         match=ifelse(condition=="m", 1, 0)) %>%
-  na.omit() %>%
-  select(mother_id, mother, offspring, match, survival)
+         match=ifelse(condition=="m", 1, 0),
+         egg=case_when(generation=="F1" & condition=="m" ~ egg_f1_m,
+                       generation=="F1" & condition=="mm" ~ egg_f1_mm,
+                       generation=="F2" & condition=="m" ~ egg_f2_m,
+                       generation=="F2" & condition=="mm" ~ egg_f2_mm)) %>%
+  select(mother_id, mother, offspring, match, egg, generation, survival) %>%
+  na.omit()
 
 ## Model
+### Generation 1
+print("########## Generation 1 ##########")
 lme = lmer(survival ~ mother + offspring + mother*offspring + (1|mother_id),
-           data = df_fitness)
+           data = df_fitness %>% filter(generation=="F1"))
 
 print("# Model Summary")
 anova(lme)
 
 print("# Wilcox Test")
-wilcox.test(survival ~ mother, data=df_fitness) 
-wilcox.test(survival ~ offspring, data=df_fitness) 
-wilcox.test(survival ~ match, data=df_fitness) 
+wilcox.test(survival ~ mother, data=df_fitness %>% filter(generation=="F1")) 
+wilcox.test(survival ~ offspring, data=df_fitness %>% filter(generation=="F1")) 
+wilcox.test(survival ~ match, data=df_fitness %>% filter(generation=="F1")) 
 
 print("# Data Summary")
-df_fitness %>%
+df_fitness  %>%
+  filter(generation=="F1") %>%
   group_by(mother, offspring) %>%
   summarise(survival_mean=mean(survival),
             survival_ci_error=ci(survival)[4],
             survival_std=sd(survival))
 
+### Generation 2
+print("########## Generation 2 ##########")
+lme = lmer(survival ~ mother + offspring + mother*offspring + (1|mother_id),
+           data = df_fitness %>% filter(generation=="F2"))
+
+print("# Model Summary")
+anova(lme)
+
+print("# Wilcox Test")
+wilcox.test(survival ~ mother, data=df_fitness %>% filter(generation=="F2")) 
+wilcox.test(survival ~ offspring, data=df_fitness %>% filter(generation=="F2")) 
+wilcox.test(survival ~ match, data=df_fitness %>% filter(generation=="F2")) 
+
+print("# Data Summary")
+df_fitness  %>%
+  filter(generation=="F2") %>%
+  group_by(mother, offspring) %>%
+  summarise(survival_mean=mean(survival),
+            survival_ci_error=ci(survival)[4],
+            survival_std=sd(survival))
+
+# Eggs
+print("#################### Eggs ####################")
+
+## Model
+### Generation 1
+print("########## Generation 1 ##########")
+lme = lmer(egg ~ mother + offspring + mother*offspring + (1|mother_id),
+           data = df_fitness %>% filter(generation=="F1"))
+
+print("# Model Summary")
+anova(lme)
+
+print("# Wilcox Test")
+wilcox.test(egg ~ mother, data=df_fitness %>% filter(generation=="F1")) 
+wilcox.test(egg ~ offspring, data=df_fitness %>% filter(generation=="F1")) 
+wilcox.test(egg ~ match, data=df_fitness %>% filter(generation=="F1")) 
+
+print("# Data Summary")
+df_fitness  %>%
+  filter(generation=="F1") %>%
+  group_by(mother, offspring) %>%
+  summarise(egg_mean=mean(egg),
+            egg_ci_error=ci(egg)[4],
+            egg_std=sd(egg))
+
+### Generation 2
+print("########## Generation 2 ##########")
+lme = lmer(egg ~ mother + offspring + mother*offspring + (1|mother_id),
+           data = df_fitness %>% filter(generation=="F2"))
+
+print("# Model Summary")
+anova(lme)
+
+print("# Wilcox Test")
+wilcox.test(egg ~ mother, data=df_fitness %>% filter(generation=="F2")) 
+wilcox.test(egg ~ offspring, data=df_fitness %>% filter(generation=="F2")) 
+wilcox.test(egg ~ match, data=df_fitness %>% filter(generation=="F2")) 
+
+print("# Data Summary")
+df_fitness  %>%
+  filter(generation=="F2") %>%
+  group_by(mother, offspring) %>%
+  summarise(egg_mean=mean(egg),
+            egg_ci_error=ci(egg)[4],
+            egg_std=sd(egg))
 
 # Recovery
 print("#################### Recovery ####################")
@@ -147,7 +220,7 @@ print("#################### Tempbox ####################")
 df_tempbox <- read.csv(file.path("tempbox_data.csv"), stringsAsFactors = FALSE, na.strings = c("NA", "#VALUE!", "#DIV/0!")) %>%
   select(mother_id, Speed_m, Speed_mm, Temp_m, Temp_mm, Sex_m, Sex_mm) %>%
   gather(condition, speed, -mother_id, -Temp_m, -Temp_mm, -Sex_m, -Sex_mm) %>%
-  separate(condition, into = c("ignore", "condition")) %>%
+  separate(condition, into = c("metric", "condition")) %>%
   mutate(mother=gsub("[^A-Za-z]", "", mother_id),
          offspring=case_when(mother=="C" & condition=="m"~"C",
                              mother=="C" & condition=="mm"~"H",
