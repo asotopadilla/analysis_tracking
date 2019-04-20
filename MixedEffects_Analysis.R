@@ -2,8 +2,8 @@
 
 target_variable <- "time_to_start_moving" #which variable do you want to analyse in the model
 sep <- ',' #specify file separator
-auditory <-c("FC", "FL", "FS")
-visual <- c("")
+auditory <-c("OT", "TT", "NT")
+visual <- c("OL", "TL", "NL")
 naming <- "stimulus_id" #naming convention used for file. I.e. stimulus_genotype_id or stimulus_id
 
 
@@ -22,6 +22,16 @@ naming <- str_split(naming, "_") %>% unlist()
 df <- read.csv(file_load, sep=sep, stringsAsFactors = FALSE) %>%
   filter(phase_type == "trial") %>%
   separate(video, naming, "_", remove = FALSE, extra = "drop")
+
+
+sf <- df %>%
+  filter(start_in_pole==1) %>%
+  mutate(check=ifelse(first_to_safe==first_to_closest, 1, 0)) %>%
+  group_by(first_to_safe, first_to_closest) %>%
+  summarise(n=n(), mean=mean(check, na.rm=TRUE)) %>%
+  group_by(mean) %>%
+  mutate(n2=sum(n), n_pcnt=100*(n/n2))
+
 
 # Anovas an Tukeys
 df_model <- df [c(naming, "phase", target_variable)]
@@ -134,4 +144,15 @@ sink(type="message")
 options(tibble.print_max = 10)
 
 print(paste0("All done! Results file saved to: ", dirname(file_load), "/", file_save))
+
+
+
+# D'Agostino Pearson normality test
+
+
+
+
+# Frequency Histogram
+
+
 
