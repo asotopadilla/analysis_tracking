@@ -1,6 +1,6 @@
 "phase_type","start_position","n","pcnt"
-"pole","pole",11,2.03703703703704
-"pole","unsafe",529,97.962962962963
-"trial","pole",459,85
-"trial","safe",41,7.59259259259259
-"trial","unsafe",40,7.40740740740741
+"pole","pole",92,2.55555555555556
+"pole","unsafe",3508,97.4444444444444
+"trial","pole",3121,86.6944444444444
+"trial","safe",248,6.88888888888889
+"trial","unsafe",231,6.41666666666667
