@@ -51,12 +51,12 @@ print("#########################################################################
 ## 2. D'Agostino Pearson normality test
 
 df_normal <- df %>%
-  select(stimulus, genotype, time_to_start_moving, time_in_pole_initial, time_in_safe_initial, time_in_safe_total,
+  dplyr::select(stimulus, genotype, time_to_start_moving, time_in_pole_initial, time_in_safe_initial, time_in_safe_total,
          time_outside_safe_after_reaching, time_to_safe, dist_to_safe, speed_to_safe) %>%
   gather(var, val, -stimulus, -genotype) %>%
   na.omit()
 
-grps <- df_normal %>% select(var) %>% unique()
+grps <- df_normal %>% dplyr::select(var) %>% unique()
 
 dago <- lapply(unique(df_normal$var), function(x){
   dago <- dagoTest(df_normal %>% dplyr::filter(var==x) %>% .$val)
