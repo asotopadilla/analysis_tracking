@@ -33,12 +33,12 @@ con <- file(file_save)
 sink(con, append=TRUE)
 sink(con, append=TRUE, type="output")
 
-## 1. Anova and Tukey 
+## 1. Anova and Tukey per genotype
 results <- lapply(unique(df_model$genotype), function(x) {
   art <- aligned.rank.transform(target ~ stimulus * phase, df_model %>% dplyr::filter(genotype==x), perform.aov = FALSE)
-  anova <- lme(fixed = target ~ stimulus * phase, random=~1|id, na.action = na.omit, data = art$aligned %>% dplyr::filter(genotype==x))
-  posthoc <- lsmeans(anova, pairwise~stimulus, adjust="tukey")
-  result <- list(anova(anova), summary(posthoc))
+  lme_model <- lme(fixed = target ~ stimulus * phase, random=~1|id, na.action = na.omit, data = art$aligned %>% dplyr::filter(genotype==x))
+  posthoc <- lsmeans(lme_model, pairwise~stimulus, adjust="tukey")
+  result <- list(anova(lme_model), summary(posthoc))
   names(result) <- c(paste0(x, " Anova"), paste0(x, " Tukey"))
   return(result)
 })
